@@ -1,0 +1,18 @@
+{
+  "name": "axzy-central",
+  "private": true,
+  "version": "1.0.0",
+  "packageManager": "pnpm@12.16.1",
+  "scripts": {
+    "dev": "pnpm --parallel --filter axzy-central-api --filter axzy-central-web dev",
+    "dev:api": "pnpm --filter axzy-central-api dev",
+    "dev:web": "pnpm --filter axzy-central-web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm --filter axzy-central-api exec tsc --noEmit && pnpm --filter axzy-central-web exec tsc -b",
+    "test": "pnpm --filter axzy-central-api test:unit",
+    "test:integration": "pnpm --filter axzy-central-api test:integration",
+    "db:test:up": "pnpm --filter axzy-central-api db:test:up",
+    "prisma:migrate": "pnpm --filter axzy-central-api prisma:migrate",
+    "seed": "pnpm --filter axzy-central-api seed"
+  }
+}

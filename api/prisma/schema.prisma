@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Quien administra la plataforma (tú). No hay usuarios de taquería.
+model Admin {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  @@map("admins")
+}
+
+model Plan {
+  id           String     @id @default(uuid())
+  name         String     @unique
+  monthlyPrice Decimal    @db.Decimal(10, 2)
+  /// Un plan dado de baja ya no se asigna; quien lo tiene lo conserva.
+  active       Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  taquerias    Taqueria[]
+
+  @@map("plans")
+}
+
+enum TaqueriaStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+model Taqueria {
+  id        String         @id @default(uuid())
+  name      String
+  ownerName String?
+  phone     String?
+  notes     String?
+  status    TaqueriaStatus @default(ACTIVE)
+  planId    String?
+  plan      Plan?          @relation(fields: [planId], references: [id], onDelete: SetNull)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  payments  Payment[]
+  devices   Device[]
+
+  @@index([planId])
+  @@map("taquerias")
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+/// Cobro mensual. El PENDING más antiguo define hasta cuándo la app trabaja sin internet.
+model Payment {
+  id         String        @id @default(uuid())
+  taqueriaId String
+  taqueria   Taqueria      @relation(fields: [taqueriaId], references: [id], onDelete: Cascade)
+  /// Periodo cobrado `YYYY-MM`.
+  period     String
+  amount     Decimal       @db.Decimal(10, 2)
+  dueDate    DateTime      @db.Date
+  status     PaymentStatus @default(PENDING)
+  paidAt     DateTime?
+  method     String?
+  notes      String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@unique([taqueriaId, period])
+  @@index([taqueriaId, status, dueDate])
+  @@map("payments")
+}
+
+/// Teléfono o tablet de cocina. El código de activación en claro solo se muestra al crearlo; aquí vive su hash.
+model Device {
+  id         String    @id @default(uuid())
+  taqueriaId String
+  taqueria   Taqueria  @relation(fields: [taqueriaId], references: [id], onDelete: Cascade)
+  name       String
+  tokenHash  String    @unique
+  active     Boolean   @default(true)
+  lastSeenAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([taqueriaId])
+  @@map("devices")
+}
