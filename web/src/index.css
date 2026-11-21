@@ -1,5 +1,42 @@
+/* La librería entra en su propia capa: después de `base` y antes de `utilities`. */
+@layer theme, base, axzy-ui-system, components, utilities;
+
 @import "tailwindcss";
+@import "@axzydev/axzy_ui_system/dist/index.css" layer(axzy-ui-system);
+
+/* Las clases de la librería también se generan aquí: si no, un `hidden` de esta app
+   le gana a su `lg:block` y oculta el menú lateral. Igual que en TimeManager. */
+@source "../node_modules/@axzydev/axzy_ui_system/src/**/*.{ts,tsx}";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Marca axzydev (axzydev-brand-kit/code/brand.css) */
+@theme {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --color-axzy-teal: #4598b1;
+  --color-axzy-deep: #387d92;
+  --color-axzy-navy: #1d2636;
+  --color-axzy-paper: #fafafa;
+  --color-axzy-slate: #5a6475;
+  --color-axzy-mist: #9aa6b8;
+}
+
+:root[data-it-appearance="flat"] {
+  --it-layout-bg: #fafafa;
+}
+
+:root.dark[data-it-appearance="flat"] {
+  --it-layout-bg: #141b26;
+}
 
 body {
-  @apply bg-stone-100 text-stone-900 antialiased;
+  font-family: var(--font-sans);
+}
+
+.axc-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }

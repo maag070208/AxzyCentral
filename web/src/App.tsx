@@ -1,20 +1,43 @@
 import { useEffect, useState } from "react";
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
-import { session, setUnauthorizedHandler } from "./api";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { ITLayout, useITTheme, type ITNavigationItem } from "@axzydev/axzy_ui_system";
+import { LuBoxes, LuLayoutDashboard, LuTags, LuUsers } from "react-icons/lu";
+import { api, session, setUnauthorizedHandler, type Me } from "./api";
+import { AxzyLoader } from "./AxzyLogo";
+import ClientDetail from "./pages/ClientDetail";
+import Clients from "./pages/Clients";
+import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Plans from "./pages/Plans";
-import TaqueriaDetail from "./pages/TaqueriaDetail";
-import Taquerias from "./pages/Taquerias";
+import Products from "./pages/Products";
+
+const NAV = [
+  { id: "home", path: "/", label: "Inicio", icon: <LuLayoutDashboard size={16} /> },
+  { id: "clients", path: "/clientes", label: "Clientes", icon: <LuUsers size={16} /> },
+  { id: "products", path: "/productos", label: "Productos", icon: <LuBoxes size={16} /> },
+  { id: "plans", path: "/planes", label: "Planes", icon: <LuTags size={16} /> },
+];
 
 export default function App() {
   const [token, setToken] = useState(session.get());
+  const [me, setMe] = useState<Me | null>(null);
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const { resolvedTheme, setDarkModeMode } = useITTheme();
+
+  const logout = () => {
+    session.set(null);
+    setToken(null);
+    setMe(null);
+  };
 
   useEffect(() => {
-    setUnauthorizedHandler(() => {
-      session.set(null);
-      setToken(null);
-    });
+    setUnauthorizedHandler(logout);
   }, []);
+
+  useEffect(() => {
+    if (token) api<Me>("GET", "/auth/me").then(setMe).catch(() => undefined);
+  }, [token]);
 
   if (!token) {
     return (
@@ -26,36 +49,40 @@ export default function App() {
       />
     );
   }
+  if (!me) return <div className="flex min-h-dvh items-center justify-center"><AxzyLoader /></div>;
 
-  const link = ({ isActive }: { isActive: boolean }) =>
-    `rounded-lg px-3 py-1.5 text-sm font-semibold ${isActive ? "bg-white/15 text-white" : "text-emerald-100 hover:text-white"}`;
+  const navigationItems: ITNavigationItem[] = NAV.map((item) => ({
+    id: item.id,
+    label: item.label,
+    icon: item.icon,
+    isActive: item.path === "/" ? pathname === "/" : pathname.startsWith(item.path),
+    action: () => navigate(item.path),
+  }));
 
   return (
-    <div className="min-h-dvh">
-      <header className="bg-emerald-800">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-2 px-4 py-3">
-          <span className="mr-4 text-lg font-black text-white">🌮 Axzy Central</span>
-          <NavLink to="/taquerias" className={link}>Taquerías</NavLink>
-          <NavLink to="/planes" className={link}>Planes</NavLink>
-          <button
-            className="ml-auto rounded-lg px-3 py-1.5 text-sm font-semibold text-emerald-100 hover:text-white"
-            onClick={() => {
-              session.set(null);
-              setToken(null);
-            }}
-          >
-            Salir
-          </button>
-        </div>
-      </header>
-      <main className="mx-auto max-w-5xl px-4 py-6">
-        <Routes>
-          <Route path="/taquerias" element={<Taquerias />} />
-          <Route path="/taquerias/:id" element={<TaqueriaDetail />} />
-          <Route path="/planes" element={<Plans />} />
-          <Route path="*" element={<Navigate to="/taquerias" replace />} />
-        </Routes>
-      </main>
-    </div>
+    <ITLayout
+      topBar={{
+        logo: <img src={`${import.meta.env.BASE_URL}brand/${resolvedTheme === "dark" ? "logo-on-dark" : "logo-no-background"}.svg`} alt="axzydev" className="h-8 w-auto" />,
+        logoText: "Central",
+        userMenu: {
+          userName: me.name,
+          userEmail: me.username,
+          menuItems: [
+            { label: resolvedTheme === "dark" ? "Modo claro" : "Modo oscuro", onClick: () => setDarkModeMode(resolvedTheme === "dark" ? "light" : "dark") },
+            { label: "Cerrar sesión", onClick: logout },
+          ],
+        },
+      }}
+      sidebar={{ navigationItems }}
+    >
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/clientes" element={<Clients />} />
+        <Route path="/clientes/:id" element={<ClientDetail />} />
+        <Route path="/productos" element={<Products />} />
+        <Route path="/planes" element={<Plans />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </ITLayout>
   );
 }

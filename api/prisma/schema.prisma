@@ -18,40 +18,63 @@ model Admin {
   @@map("admins")
 }
 
-model Plan {
-  id           String     @id @default(uuid())
-  name         String     @unique
-  monthlyPrice Decimal    @db.Decimal(10, 2)
-  /// Un plan dado de baja ya no se asigna; quien lo tiene lo conserva.
-  active       Boolean    @default(true)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  taquerias    Taqueria[]
+/// Lo que vendes: la app de taquerías, CheckLab, etc. Cada cliente y cada plan es de un producto.
+model Product {
+  id          String   @id @default(uuid())
+  /// Clave estable para el código (p. ej. `TAQUERIA`).
+  key         String   @unique
+  name        String
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  plans       Plan[]
+  clients     Client[]
 
+  @@map("products")
+}
+
+model Plan {
+  id           String   @id @default(uuid())
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  name         String
+  monthlyPrice Decimal  @db.Decimal(10, 2)
+  /// Un plan dado de baja ya no se asigna; quien lo tiene lo conserva.
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  clients      Client[]
+
+  @@unique([productId, name])
   @@map("plans")
 }
 
-enum TaqueriaStatus {
+enum ClientStatus {
   ACTIVE
   SUSPENDED
 }
 
-model Taqueria {
-  id        String         @id @default(uuid())
-  name      String
-  ownerName String?
-  phone     String?
-  notes     String?
-  status    TaqueriaStatus @default(ACTIVE)
-  planId    String?
-  plan      Plan?          @relation(fields: [planId], references: [id], onDelete: SetNull)
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
-  payments  Payment[]
-  devices   Device[]
+model Client {
+  id          String       @id @default(uuid())
+  productId   String
+  product     Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  name        String
+  contactName String?
+  phone       String?
+  email       String?
+  notes       String?
+  status      ClientStatus @default(ACTIVE)
+  planId      String?
+  plan        Plan?        @relation(fields: [planId], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  payments    Payment[]
+  devices     Device[]
 
   @@index([planId])
-  @@map("taquerias")
+  @@index([productId])
+  @@map("clients")
 }
 
 enum PaymentStatus {
@@ -62,36 +85,36 @@ enum PaymentStatus {
 
 /// Cobro mensual. El PENDING más antiguo define hasta cuándo la app trabaja sin internet.
 model Payment {
-  id         String        @id @default(uuid())
-  taqueriaId String
-  taqueria   Taqueria      @relation(fields: [taqueriaId], references: [id], onDelete: Cascade)
+  id        String        @id @default(uuid())
+  clientId  String
+  client    Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
   /// Periodo cobrado `YYYY-MM`.
-  period     String
-  amount     Decimal       @db.Decimal(10, 2)
-  dueDate    DateTime      @db.Date
-  status     PaymentStatus @default(PENDING)
-  paidAt     DateTime?
-  method     String?
-  notes      String?
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
+  period    String
+  amount    Decimal       @db.Decimal(10, 2)
+  dueDate   DateTime      @db.Date
+  status    PaymentStatus @default(PENDING)
+  paidAt    DateTime?
+  method    String?
+  notes     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
 
-  @@unique([taqueriaId, period])
-  @@index([taqueriaId, status, dueDate])
+  @@unique([clientId, period])
+  @@index([clientId, status, dueDate])
   @@map("payments")
 }
 
-/// Teléfono o tablet de cocina. El código de activación en claro solo se muestra al crearlo; aquí vive su hash.
+/// Licencia de un dispositivo del cliente (p. ej. la tablet de cocina). El código en claro solo se muestra al crearlo; aquí vive su hash.
 model Device {
   id         String    @id @default(uuid())
-  taqueriaId String
-  taqueria   Taqueria  @relation(fields: [taqueriaId], references: [id], onDelete: Cascade)
+  clientId   String
+  client     Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   name       String
   tokenHash  String    @unique
   active     Boolean   @default(true)
   lastSeenAt DateTime?
   createdAt  DateTime  @default(now())
 
-  @@index([taqueriaId])
+  @@index([clientId])
   @@map("devices")
 }

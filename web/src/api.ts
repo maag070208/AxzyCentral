@@ -4,12 +4,24 @@ const TOKEN_KEY = "axc_token";
 export type Status = "ACTIVE" | "SUSPENDED";
 export type PaymentStatus = "PENDING" | "PAID" | "CANCELLED";
 
+export interface Product {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  active: boolean;
+  clients?: number;
+  plans?: number;
+}
+
 export interface Plan {
   id: string;
+  productId: string;
+  productName: string | null;
   name: string;
   monthlyPrice: string;
   active: boolean;
-  taquerias?: number;
+  clients?: number;
 }
 
 export interface Payment {
@@ -31,11 +43,13 @@ export interface Device {
   createdAt: string;
 }
 
-export interface TaqueriaSummary {
+export interface ClientSummary {
   id: string;
   name: string;
-  ownerName: string | null;
+  product: Product;
+  contactName: string | null;
   phone: string | null;
+  email: string | null;
   notes: string | null;
   status: Status;
   plan: Plan | null;
@@ -46,9 +60,15 @@ export interface TaqueriaSummary {
   createdAt: string;
 }
 
-export interface TaqueriaDetail extends Omit<TaqueriaSummary, "devices"> {
+export interface ClientDetail extends Omit<ClientSummary, "devices"> {
   payments: Payment[];
   devices: Device[];
+}
+
+export interface Me {
+  id: string;
+  username: string;
+  name: string;
 }
 
 export class ApiError extends Error {
@@ -105,6 +125,8 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
 
 export const money = (value: string | number) =>
   Number(value).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+
+export const today = () => new Date().toISOString().slice(0, 10);
 
 export const dateText = (iso: string | null) =>
   iso ? new Date(iso.length === 10 ? `${iso}T12:00:00` : iso).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" }) : "—";

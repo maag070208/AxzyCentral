@@ -7,7 +7,8 @@ import { errorHandler } from "./errors";
 import { authRouter } from "./routes/auth";
 import { licenseRouter } from "./routes/license";
 import { plansRouter } from "./routes/plans";
-import { taqueriasRouter } from "./routes/taquerias";
+import { clientsRouter } from "./routes/clients";
+import { productsRouter } from "./routes/products";
 
 export const createApp = () => {
   const app = express();
@@ -23,8 +24,9 @@ export const createApp = () => {
   const api = express.Router();
   api.use("/auth", authRouter);
   api.use("/license", licenseRouter);
+  api.use("/products", requireAdmin, productsRouter);
   api.use("/plans", requireAdmin, plansRouter);
-  api.use("/taquerias", requireAdmin, taqueriasRouter);
+  api.use("/clients", requireAdmin, clientsRouter);
   app.use("/api/v1", api);
 
   app.use((_req, res) => {
