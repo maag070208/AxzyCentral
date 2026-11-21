@@ -3,6 +3,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   ITAlert,
   ITBadget,
+  ITBentoPill,
+  ITBentoPillRow,
+  ITBentoStatStrip,
   ITButton,
   ITCard,
   ITConfirmDialog,
@@ -10,14 +13,55 @@ import {
   ITInput,
   ITPage,
   ITSelect,
+  ITSegmentedControl,
+  ITTable,
   ITText,
+  type Column,
 } from "@axzydev/axzy_ui_system";
-import { LuCheck, LuCopy, LuKeyRound, LuPause, LuPlay, LuPlus, LuRefreshCw, LuShieldOff, LuUser } from "react-icons/lu";
-import { agoText, api, dateText, money, today, type ClientDetail as Detail, type Device, type Plan } from "../api";
+import {
+  LuKeyRound,
+  LuPause,
+  LuPlay,
+  LuPlus,
+  LuQrCode,
+  LuRefreshCw,
+  LuShieldOff,
+  LuUser,
+} from "react-icons/lu";
+import {
+  agoText,
+  api,
+  createPayment,
+  dateText,
+  generatePayment,
+  money,
+  paymentConcept,
+  periodText,
+  planPrice,
+  setDeviceActive,
+  today,
+  updatePayment,
+  type ClientDetail as Detail,
+  type Device,
+  type Payment,
+  type PaymentKind,
+  type Plan,
+} from "../api";
 import { useNotify } from "../toast";
-import { Eyebrow, StatusBadge, errorOf, isoDate } from "../shared";
+import {
+  BillingTypeBadge,
+  CountUp,
+  KindBadge,
+  PaymentBadge,
+  SectionTitle,
+  StatusBadge,
+  errorOf,
+  isoDate,
+  paymentError,
+} from "../shared";
+import QrActivationDialog from "../components/QrActivationDialog";
 
-type Run = (fn: () => Promise<unknown>, ok?: string) => Promise<boolean>;
+type Run = (fn: () => Promise<unknown>, ok?: string, mapErr?: (e: unknown) => string) => Promise<boolean>;
 
 export default function ClientDetail() {
   const { id = "" } = useParams();
@@ -43,7 +87,7 @@ export default function ClientDetail() {
   }, [load]);
 
   /** Corre una acción; si devuelve el cliente actualizado lo pinta, si no, recarga. */
-  const run: Run = async (fn, ok) => {
+  const run: Run = async (fn, ok, mapErr = errorOf) => {
     try {
       const next = await fn();
       if (next && typeof next === "object" && "payments" in next) setClient(next as Detail);
@@ -51,12 +95,16 @@ export default function ClientDetail() {
       if (ok) notify(ok);
       return true;
     } catch (e) {
-      notify(errorOf(e), "error");
+      notify(mapErr(e), "error");
       return false;
     }
   };
 
   const suspended = client?.status === "SUSPENDED";
+
+  const pending = (client?.payments ?? []).filter((p) => p.status === "PENDING");
+  const pendingAmount = pending.reduce((sum, p) => sum + Number(p.amount), 0);
+  const activeDevices = (client?.devices ?? []).filter((d) => d.active);
 
   return (
     <ITPage
@@ -84,11 +132,57 @@ export default function ClientDetail() {
       }
     >
       {client && (
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-7">
+          <ITBentoStatStrip
+            items={[
+              {
+                id: "plan",
+                label: "Plan actual",
+                value: client.plan?.name ?? "Sin plan",
+                caption: client.plan ? planPrice(client.plan) : "asígnale uno abajo",
+                color: "var(--color-primary)",
+                tone: "plain",
+              },
+              {
+                id: "licenses",
+                label: "Licencias",
+                value: (
+                  <span className="whitespace-nowrap">
+                    <CountUp value={activeDevices.length} />/{client.devices.length}
+                  </span>
+                ),
+                caption: activeDevices.length === 0 ? "sin activar" : `última: ${agoText(client.lastSeenAt)}`,
+                color: "var(--color-success)",
+                tone: activeDevices.length === 0 ? "sun" : "mint",
+              },
+              {
+                id: "next",
+                label: "Próximo pago",
+                value: (
+                  <span className="whitespace-nowrap text-[22px]">
+                    {client.nextDueDate ? dateText(client.nextDueDate) : "Al corriente"}
+                  </span>
+                ),
+                caption: client.overdue ? "vencido" : pending.length > 0 ? `${pending.length} pendiente(s)` : "sin pendientes",
+                color: client.overdue ? "var(--color-danger)" : "var(--color-warning)",
+                tone: client.overdue ? "sun" : "lavender",
+              },
+              {
+                id: "pending",
+                label: "Por cobrar",
+                value: money(pendingAmount),
+                caption: `${pending.length} pendiente(s)`,
+                color: "var(--color-info)",
+                tone: "sea",
+              },
+            ]}
+          />
+
           <div className="grid gap-5 xl:grid-cols-2">
             <InfoCard key={client.plan?.id ?? "none"} client={client} plans={plans} run={run} />
             <DevicesCard client={client} run={run} />
           </div>
+
           <PaymentsCard client={client} run={run} />
         </div>
       )}
@@ -131,6 +225,7 @@ function InfoCard({ client, plans, run }: { client: Detail; plans: Plan[]; run: 
   const [form, setForm] = useState(initial);
   const dirty = JSON.stringify(form) !== JSON.stringify(initial);
   const options = plans.filter((p) => p.active || p.id === client.plan?.id);
+  const selected = options.find((p) => p.id === form.planId) ?? null;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -138,13 +233,13 @@ function InfoCard({ client, plans, run }: { client: Detail; plans: Plan[]; run: 
   };
 
   return (
-    <ITCard title="Datos y plan">
+    <ITCard title="Datos y plan" tone="ternary">
       <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2" noValidate>
         <div className="sm:col-span-2">
           <ITInput name="name" label="Nombre" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
         </div>
         <ITInput name="contactName" label="Contacto" value={form.contactName} onChange={(e) => setForm({ ...form, contactName: e.target.value })} />
-        <ITInput name="phone" label="Teléfono" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+        <ITInput name="phone" label="Teléfono (WhatsApp)" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
         <div className="sm:col-span-2">
           <ITInput name="email" type="email" label="Correo" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
         </div>
@@ -156,10 +251,23 @@ function InfoCard({ client, plans, run }: { client: Detail; plans: Plan[]; run: 
             value={form.planId}
             options={[
               { value: "", label: "Sin plan" },
-              ...options.map((p) => ({ value: p.id, label: `${p.name} · ${money(p.monthlyPrice)}/mes${p.active ? "" : " (dado de baja)"}` })),
+              ...options.map((p) => ({
+                value: p.id,
+                label: `${p.name} · ${planPrice(p)}${p.active ? "" : " (dado de baja)"}`,
+              })),
             ]}
             onChange={(e) => setForm({ ...form, planId: e.target.value })}
           />
+          {selected && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <BillingTypeBadge type={selected.billingType} />
+              <ITText muted className="text-xs">
+                {selected.billingType === "RECURRING"
+                  ? "Se cobra cada mes; la Central genera el siguiente cobro."
+                  : "Se cobra una sola vez como cargo inicial del producto."}
+              </ITText>
+            </div>
+          )}
         </div>
         <div className="sm:col-span-2">
           <ITInput name="notes" type="textarea" rows={2} label="Notas" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
@@ -175,101 +283,89 @@ function InfoCard({ client, plans, run }: { client: Detail; plans: Plan[]; run: 
 }
 
 function DevicesCard({ client, run }: { client: Detail; run: Run }) {
-  const notify = useNotify();
-  const [issued, setIssued] = useState<{ device: Device; code: string } | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [qrDevice, setQrDevice] = useState<Device | null>(null);
   const [revoking, setRevoking] = useState<Device | null>(null);
 
-  const issue = async (fn: () => Promise<{ device: Device; code: string }>) => {
-    setCopied(false);
-    try {
-      setIssued(await fn());
-      await run(() => api("GET", `/clients/${client.id}`));
-    } catch (e) {
-      notify(errorOf(e), "error");
-    }
+  const openNew = () => {
+    setQrDevice(null);
+    setQrOpen(true);
   };
-
-  const copy = async () => {
-    if (!issued) return;
-    try {
-      await navigator.clipboard.writeText(issued.code);
-      setCopied(true);
-    } catch {
-      notify("No se pudo copiar; selecciona el código a mano", "error");
-    }
+  const openRotate = (device: Device) => {
+    setQrDevice(device);
+    setQrOpen(true);
   };
 
   return (
     <ITCard
       title="Licencias"
       headerActions={
-        <ITButton
-          size="sm"
-          variant="outlined"
-          icon={<LuPlus size={13} />}
-          onClick={() => void issue(() => api("POST", `/clients/${client.id}/devices`, { name: `Dispositivo ${client.devices.length + 1}` }))}
-        >
-          Generar código
+        <ITButton size="sm" icon={<LuQrCode size={14} />} onClick={openNew}>
+          Generar QR de activación
         </ITButton>
       }
     >
       <ITText muted className="mb-4 block text-sm">
-        Cada dispositivo del cliente (por ejemplo, la tablet de cocina) se activa una vez con su código. Con él la app pregunta si la cuenta sigue activa.
+        Cada tablet se activa una sola vez escaneando un QR con la app de Cocina. Después, la app pregunta si la cuenta
+        sigue activa al conectarse.
       </ITText>
 
-      {issued && (
-        <div className="mb-4 rounded-[10px] border border-primary-200 bg-primary-50 p-4 dark:border-primary-800 dark:bg-primary-950/40">
-          <Eyebrow>Código de {issued.device.name} · solo se muestra ahora</Eyebrow>
-          <p className="my-2 break-all rounded-md bg-white p-2 font-mono text-sm text-axzy-navy dark:bg-slate-900 dark:text-white">{issued.code}</p>
-          <ITText className="mb-3 block text-xs">
-            Mándalo por WhatsApp{client.phone ? ` al ${client.phone}` : ""} y que lo pegue en la app al activarla.
-          </ITText>
-          <div className="flex gap-2">
-            <ITButton size="sm" icon={copied ? <LuCheck size={13} /> : <LuCopy size={13} />} onClick={() => void copy()}>
-              {copied ? "Copiado" : "Copiar"}
-            </ITButton>
-            <ITButton size="sm" variant="text" color="gray" onClick={() => setIssued(null)}>
-              Listo
-            </ITButton>
-          </div>
-        </div>
-      )}
-
       {client.devices.length === 0 ? (
-        <ITText muted className="text-sm">Todavía no hay dispositivos.</ITText>
+        <div className="flex flex-col items-start gap-3 rounded-2xl bg-[var(--it-bento-control-bg,#f1f5f9)] p-4">
+          <ITText muted className="text-sm">
+            Todavía no hay licencias. Genera el primer QR y escanéalo desde la tablet de cocina.
+          </ITText>
+          <ITButton size="sm" variant="outlined" icon={<LuQrCode size={14} />} onClick={openNew}>
+            Generar primer QR
+          </ITButton>
+        </div>
       ) : (
         <ul className="divide-y divide-slate-200 dark:divide-slate-800">
           {client.devices.map((d) => (
-            <li key={d.id} className="flex flex-wrap items-center gap-2 py-3">
-              <LuKeyRound aria-hidden className="text-axzy-teal" />
-              <div className="min-w-32 flex-1">
-                <p className="font-semibold">
-                  {d.name} {!d.active && <ITBadget color="gray" label="Revocado" size="sm" />}
+            <li key={d.id} className="flex flex-col gap-2 py-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <LuKeyRound aria-hidden className="text-axzy-deep dark:text-axzy-teal" />
+                <p className="min-w-32 flex-1 font-semibold">
+                  {d.name} {!d.active && <ITBadget color="gray" label="Revocada" size="sm" />}
+                  {d.active && d.activatedAt && <ITBadget color="success" label="Activada" size="sm" />}
                 </p>
-                <p className="text-xs text-axzy-slate dark:text-axzy-mist">Última conexión: {agoText(d.lastSeenAt)}</p>
+                <ITButton size="sm" variant="outlined" icon={<LuQrCode size={13} />} onClick={() => openRotate(d)}>
+                  Nuevo QR
+                </ITButton>
+                {d.active ? (
+                  <ITButton size="sm" variant="text" color="danger" icon={<LuShieldOff size={13} />} onClick={() => setRevoking(d)}>
+                    Revocar
+                  </ITButton>
+                ) : (
+                  <ITButton
+                    size="sm"
+                    variant="text"
+                    icon={<LuRefreshCw size={13} />}
+                    onClick={() => void run(() => setDeviceActive(client.id, d.id, true), "Licencia reactivada")}
+                  >
+                    Reactivar
+                  </ITButton>
+                )}
               </div>
-              <ITButton
-                size="sm"
-                variant="text"
-                icon={<LuRefreshCw size={13} />}
-                onClick={() => void issue(() => api("POST", `/clients/${client.id}/devices/${d.id}/code`))}
-              >
-                Nuevo código
-              </ITButton>
-              {d.active ? (
-                <ITButton size="sm" variant="outlined" color="danger" icon={<LuShieldOff size={13} />} onClick={() => setRevoking(d)}>
-                  Revocar
-                </ITButton>
-              ) : (
-                <ITButton size="sm" variant="outlined" onClick={() => void run(() => api("PATCH", `/clients/${client.id}/devices/${d.id}`, { active: true }), "Licencia reactivada")}>
-                  Reactivar
-                </ITButton>
-              )}
+              <div className="flex flex-wrap gap-x-4 gap-y-1 pl-6 text-xs text-axzy-slate dark:text-axzy-mist">
+                <span>Modelo: {d.model ?? "sin registrar"}</span>
+                <span>{d.activatedAt ? `Activada el ${dateText(d.activatedAt)}` : "Aún sin primera activación"}</span>
+                <span>Última conexión: {agoText(d.lastSeenAt)}</span>
+              </div>
             </li>
           ))}
         </ul>
       )}
+
+      <QrActivationDialog
+        isOpen={qrOpen}
+        onClose={() => setQrOpen(false)}
+        client={client}
+        device={qrDevice}
+        onIssued={() => {
+          void run(() => api("GET", `/clients/${client.id}`));
+        }}
+      />
 
       <ITConfirmDialog
         isOpen={revoking !== null}
@@ -277,10 +373,10 @@ function DevicesCard({ client, run }: { client: Detail; run: Run }) {
         onConfirm={async () => {
           const d = revoking;
           setRevoking(null);
-          if (d) await run(() => api("PATCH", `/clients/${client.id}/devices/${d.id}`, { active: false }), "Licencia revocada");
+          if (d) await run(() => setDeviceActive(client.id, d.id, false), "Licencia revocada");
         }}
         title={`¿Revocar ${revoking?.name ?? ""}?`}
-        message="Esa app se bloquea en cuanto se conecte a internet. Puedes reactivarla o darle un código nuevo después."
+        message="Esa app se bloquea en cuanto se conecte a internet. Puedes reactivarla o generarle un QR nuevo después."
         confirmLabel="Revocar"
         cancelLabel="Cancelar"
         variant="danger"
@@ -292,113 +388,280 @@ function DevicesCard({ client, run }: { client: Detail; run: Run }) {
 const PAYMENT_LABEL = { PENDING: "Pendiente", PAID: "Pagado", CANCELLED: "Cancelado" } as const;
 
 function PaymentsCard({ client, run }: { client: Detail; run: Run }) {
-  const [amount, setAmount] = useState(client.plan ? String(Number(client.plan.monthlyPrice)) : "");
-  const [due, setDue] = useState<Date>(new Date());
   const [adding, setAdding] = useState(false);
+  const [kind, setKind] = useState<PaymentKind>("RECURRING");
+  const [amount, setAmount] = useState(client.plan ? String(Number(client.plan.price)) : "");
+  const [concept, setConcept] = useState(client.plan?.name ?? "");
+  const [notes, setNotes] = useState("");
+  const [due, setDue] = useState<Date>(new Date());
+  const [busy, setBusy] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const dueIso = isoDate(due);
+  const period = dueIso.slice(0, 7);
+
+  // Si cambia el plan (o el cliente), el importe sugerido sigue al plan nuevo.
+  useEffect(() => {
+    setAmount(client.plan ? String(Number(client.plan.price)) : "");
+    setConcept(client.plan?.name ?? "");
+  }, [client.plan?.id, client.plan?.price, client.plan?.name]);
+
+  const resetForm = () => {
+    setAdding(false);
+    setKind("RECURRING");
+    setNotes("");
+    setDue(new Date());
+    setAmount(client.plan ? String(Number(client.plan.price)) : "");
+    setConcept(client.plan?.name ?? "");
+  };
 
   const create = async (e: FormEvent) => {
     e.preventDefault();
-    const ok = await run(
-      () => api("POST", `/clients/${client.id}/payments`, { period: dueIso.slice(0, 7), amount: Number(amount), dueDate: dueIso }),
-      "Cobro agregado"
-    );
+    setBusy(true);
+    const body =
+      kind === "RECURRING"
+        ? {
+            kind,
+            period,
+            amount: Number(amount),
+            dueDate: dueIso,
+            concept: concept.trim() || null,
+            notes: notes.trim() || null,
+          }
+        : {
+            kind,
+            amount: Number(amount),
+            dueDate: dueIso,
+            concept: concept.trim() || "Pago único",
+            notes: notes.trim() || null,
+          };
+    const ok = await run(() => createPayment(client.id, body), "Cobro agregado", paymentError);
+    setBusy(false);
+    if (ok) resetForm();
+  };
+
+  const generateNext = async () => {
+    setGenerating(true);
+    const ok = await run(() => generatePayment(client.id), "Siguiente cobro generado", paymentError);
+    setGenerating(false);
     if (ok) setAdding(false);
   };
-  const setStatus = (paymentId: string, status: string, method?: string) =>
-    void run(() => api("PATCH", `/clients/${client.id}/payments/${paymentId}`, { status, ...(method ? { method } : {}) }), "Cobro actualizado");
+
+  const changeStatus = (paymentId: string, status: "PENDING" | "PAID" | "CANCELLED", method?: string) =>
+    void run(() => updatePayment(client.id, paymentId, { status, ...(method ? { method } : {}) }), "Cobro actualizado", paymentError);
+
+  const pending = client.payments.filter((p) => p.status === "PENDING");
+  const paid = client.payments.filter((p) => p.status === "PAID");
+  const pendingTotal = pending.reduce((s, p) => s + Number(p.amount), 0);
+  const paidTotal = paid.reduce((s, p) => s + Number(p.amount), 0);
+
+  const columns: Column<Payment>[] = [
+    { key: "kind", label: "Tipo", type: "string", width: 104, render: (p) => <KindBadge kind={p.kind} /> },
+    {
+      key: "concept",
+      label: "Concepto / periodo",
+      type: "string",
+      width: 220,
+      render: (p) => (
+        <span className="block">
+          <span className="block font-medium">{paymentConcept(p)}</span>
+          <span className="block text-xs text-axzy-slate dark:text-axzy-mist">
+            {p.kind === "RECURRING" ? `Periodo ${periodText(p.period)}` : "Sin periodo"}
+          </span>
+        </span>
+      ),
+    },
+    { key: "amount", label: "Importe", type: "string", width: 100, render: (p) => <span className="tabular-nums">{money(p.amount)}</span>, align: "right" },
+    {
+      key: "dueDate",
+      label: "Vence",
+      type: "string",
+      width: 100,
+      render: (p) => {
+        const late = p.status === "PENDING" && p.dueDate < today();
+        return <span className={late ? "font-semibold text-red-700 dark:text-red-400" : ""}>{dateText(p.dueDate)}</span>;
+      },
+    },
+    {
+      key: "status",
+      label: "Estado",
+      type: "string",
+      width: 124,
+      render: (p) => (
+        <span className="block">
+          <PaymentBadge status={p.status} dueDate={p.dueDate} />
+          {p.paidAt && (
+            <span className="mt-0.5 block text-xs text-axzy-slate dark:text-axzy-mist">
+              {dateText(p.paidAt)}
+              {p.method ? ` · ${p.method}` : ""}
+            </span>
+          )}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      label: "Acciones",
+      type: "actions",
+      width: 252,
+      align: "right",
+      actions: (p) =>
+        p.status === "PENDING" ? (
+          <span className="inline-flex flex-wrap justify-end gap-1">
+            <ITButton size="sm" variant="outlined" onClick={() => changeStatus(p.id, "PAID", "Efectivo")}>
+              Efectivo
+            </ITButton>
+            <ITButton size="sm" variant="outlined" onClick={() => changeStatus(p.id, "PAID", "Transferencia")}>
+              Transferencia
+            </ITButton>
+            <ITButton size="sm" variant="text" color="gray" onClick={() => changeStatus(p.id, "CANCELLED")}>
+              Cancelar
+            </ITButton>
+          </span>
+        ) : (
+          <ITButton size="sm" variant="text" color="gray" onClick={() => changeStatus(p.id, "PENDING")}>
+            Reabrir
+          </ITButton>
+        ),
+    },
+  ];
 
   return (
-    <ITCard
-      title="Cobros"
-      headerActions={
-        !adding && (
-          <ITButton size="sm" variant="outlined" icon={<LuPlus size={13} />} onClick={() => setAdding(true)}>
-            Agregar cobro
-          </ITButton>
-        )
-      }
-    >
-      <ITText muted className="mb-4 block text-sm">
-        Sin internet, las apps funcionan hasta 5 días después del cobro pendiente más antiguo. Un pago vencido no suspende solo: tú decides.
-      </ITText>
+    <section aria-labelledby="cobros" className="flex flex-col gap-3">
+      <SectionTitle
+        id="cobros"
+        eyebrow="Cobros"
+        title="Historial de cobros"
+        description="Registra cobros mensuales o cargos únicos; la Central no cobra con pasarela, solo lleva el registro."
+        action={
+          <>
+            <ITButton variant="outlined" size="sm" icon={<LuRefreshCw size={14} />} onClick={() => void generateNext()} disabled={generating || !client.plan}>
+              {generating ? "Generando…" : "Generar siguiente cobro"}
+            </ITButton>
+            <ITButton size="sm" icon={<LuPlus size={14} />} onClick={() => (adding ? resetForm() : setAdding(true))}>
+              {adding ? "Cerrar alta" : "Agregar cobro"}
+            </ITButton>
+          </>
+        }
+      />
 
-      {adding && (
-        <form onSubmit={create} className="mb-5 grid items-end gap-3 rounded-[10px] border border-slate-200 p-4 sm:grid-cols-[1fr_1fr_auto] dark:border-slate-800" noValidate>
-          <ITDatePicker
-            name="dueDate"
-            label="Vence"
-            value={due}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v instanceof Date) setDue(v);
+      <ITCard>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <ITBentoPillRow>
+            <ITBentoPill dot="var(--color-warning)">Pendiente {money(pendingTotal)}</ITBentoPill>
+            <ITBentoPill dot="var(--color-success)">Cobrado {money(paidTotal)}</ITBentoPill>
+            <ITBentoPill dot="var(--color-danger)">{client.overdue ? "Vencido" : "Sin vencidos"}</ITBentoPill>
+          </ITBentoPillRow>
+          {!client.plan && <ITText muted className="text-xs">Sin plan: los cobros manuales siguen disponibles.</ITText>}
+        </div>
+
+        {adding && (
+          <form
+            onSubmit={create}
+            className="mb-5 grid gap-4 rounded-2xl bg-[var(--it-card-bg)] p-4 shadow-sm ring-1 ring-black/5 sm:grid-cols-2 dark:ring-white/10"
+            noValidate
+          >
+            <div className="sm:col-span-2">
+              <p className="axc-eyebrow mb-2 text-axzy-slate dark:text-axzy-mist">Tipo de cobro</p>
+              <ITSegmentedControl
+                size="sm"
+                options={[
+                  { value: "RECURRING", label: "Recurrente (mensual)" },
+                  { value: "ONE_TIME", label: "Único" },
+                ]}
+                value={kind}
+                onChange={(value) => setKind(value as PaymentKind)}
+              />
+              <ITText muted className="mt-2 block text-xs">
+                {kind === "RECURRING"
+                  ? `Se registrará el periodo ${period} (uno por mes y cliente).`
+                  : "Cargo único sin periodo; por ejemplo, instalación y capacitación."}
+              </ITText>
+            </div>
+            <ITDatePicker
+              name="dueDate"
+              label="Vence"
+              value={due}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value instanceof Date) setDue(value);
+              }}
+            />
+            <ITInput name="amount" type="number" label="Importe (MXN)" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+            <ITInput
+              name="concept"
+              label={kind === "RECURRING" ? "Concepto (opcional)" : "Concepto"}
+              value={concept}
+              onChange={(e) => setConcept(e.target.value)}
+              placeholder={kind === "RECURRING" ? "Mensualidad" : "Instalación y capacitación"}
+            />
+            <ITInput name="notes" label="Notas (opcional)" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <div className="flex flex-wrap justify-end gap-2 sm:col-span-2">
+              <ITButton type="button" variant="text" color="gray" onClick={resetForm}>
+                Cancelar
+              </ITButton>
+              <ITButton type="submit" disabled={busy || !(Number(amount) > 0)}>
+                {busy ? "Guardando…" : "Agregar cobro"}
+              </ITButton>
+            </div>
+          </form>
+        )}
+
+        {client.payments.length === 0 ? (
+          <ITText muted className="text-sm">
+            Sin cobros registrados. Genera el siguiente según el plan o agrega uno manual.
+          </ITText>
+        ) : (
+          <ITTable
+            columns={columns as unknown as Column<Record<string, unknown>>[]}
+            data={client.payments as unknown as Record<string, unknown>[]}
+            size="sm"
+            density="compact"
+            layout="fixed"
+            defaultItemsPerPage={10}
+            itemsPerPageOptions={[10, 25, 50]}
+            autoCardBreakpoint={720}
+            renderCard={(row) => {
+              const p = row as unknown as Payment;
+              return (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold">{paymentConcept(p)}</p>
+                      <p className="text-xs text-axzy-slate dark:text-axzy-mist">
+                        {p.kind === "RECURRING" ? `Periodo ${periodText(p.period)}` : "Pago único"}
+                      </p>
+                    </div>
+                    <PaymentBadge status={p.status} dueDate={p.dueDate} />
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <span className="font-semibold tabular-nums">{money(p.amount)}</span>
+                    <span>Vence {dateText(p.dueDate)}</span>
+                  </div>
+                  {p.status === "PENDING" && (
+                    <div className="flex flex-wrap gap-2">
+                      <ITButton size="sm" variant="outlined" onClick={() => changeStatus(p.id, "PAID", "Efectivo")}>
+                        Pagó efectivo
+                      </ITButton>
+                      <ITButton size="sm" variant="outlined" onClick={() => changeStatus(p.id, "PAID", "Transferencia")}>
+                        Pagó transferencia
+                      </ITButton>
+                      <ITButton size="sm" variant="text" color="gray" onClick={() => changeStatus(p.id, "CANCELLED")}>
+                        Cancelar
+                      </ITButton>
+                    </div>
+                  )}
+                </div>
+              );
             }}
           />
-          <ITInput name="amount" type="number" label="Importe (MXN)" value={amount} onChange={(e) => setAmount(e.target.value)} required />
-          <div className="flex gap-2">
-            <ITButton type="submit" disabled={!(Number(amount) > 0)}>Agregar</ITButton>
-            <ITButton type="button" variant="text" color="gray" onClick={() => setAdding(false)}>Cancelar</ITButton>
-          </div>
-          <ITText muted className="text-xs sm:col-span-3">Periodo: {dueIso.slice(0, 7)} (uno por mes).</ITText>
-        </form>
-      )}
+        )}
 
-      {client.payments.length === 0 ? (
-        <ITText muted className="text-sm">Sin cobros registrados.</ITText>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[620px] text-left text-sm">
-            <thead>
-              <tr className="axc-eyebrow border-b border-slate-200 text-axzy-slate dark:border-slate-800 dark:text-axzy-mist">
-                <th className="py-2 font-medium">Periodo</th>
-                <th className="py-2 font-medium">Importe</th>
-                <th className="py-2 font-medium">Vence</th>
-                <th className="py-2 font-medium">Estado</th>
-                <th className="py-2 font-medium"><span className="sr-only">Acciones</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {client.payments.map((p) => {
-                const late = p.status === "PENDING" && p.dueDate < today();
-                return (
-                  <tr key={p.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
-                    <td className="py-3 font-mono font-semibold">{p.period}</td>
-                    <td className="py-3 tabular-nums">{money(p.amount)}</td>
-                    <td className={`py-3 ${late ? "font-semibold text-red-700 dark:text-red-400" : ""}`}>{dateText(p.dueDate)}</td>
-                    <td className="py-3">
-                      <ITBadget
-                        size="sm"
-                        color={p.status === "PAID" ? "success" : p.status === "CANCELLED" ? "gray" : late ? "danger" : "warning"}
-                        label={late ? "Vencido" : PAYMENT_LABEL[p.status]}
-                      />
-                      {p.paidAt && (
-                        <span className="ml-2 text-xs text-axzy-slate dark:text-axzy-mist">
-                          {dateText(p.paidAt)}
-                          {p.method ? ` · ${p.method}` : ""}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 text-right">
-                      {p.status === "PENDING" ? (
-                        <span className="inline-flex flex-wrap justify-end gap-1">
-                          <ITButton size="sm" variant="outlined" onClick={() => setStatus(p.id, "PAID", "Efectivo")}>Pagó efectivo</ITButton>
-                          <ITButton size="sm" variant="outlined" onClick={() => setStatus(p.id, "PAID", "Transferencia")}>Pagó transferencia</ITButton>
-                          <ITButton size="sm" variant="text" color="gray" onClick={() => setStatus(p.id, "CANCELLED")}>Cancelar</ITButton>
-                        </span>
-                      ) : (
-                        <ITButton size="sm" variant="text" color="gray" onClick={() => setStatus(p.id, "PENDING")}>Reabrir</ITButton>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {client.payments.some((p) => p.status === "PENDING") && !client.overdue && (
-        <ITAlert variant="info" className="mt-4">Siguiente pago: {dateText(client.nextDueDate)}.</ITAlert>
-      )}
-    </ITCard>
+        {pending.length > 0 && !client.overdue && (
+          <ITAlert variant="info" className="mt-4">
+            Siguiente pago: {dateText(client.nextDueDate)} · {PAYMENT_LABEL.PENDING} {money(pendingTotal)}.
+          </ITAlert>
+        )}
+      </ITCard>
+    </section>
   );
 }

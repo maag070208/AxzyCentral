@@ -4,19 +4,31 @@ import { z } from "zod";
 import { db } from "../db";
 import { asyncHandler, HttpError } from "../errors";
 
+const BillingType = z.enum(["RECURRING", "ONE_TIME"]);
+
 const PlanInput = z.object({
   productId: z.string().uuid(),
   name: z.string().trim().min(2).max(80),
-  monthlyPrice: z.number().min(0).max(1_000_000),
+  billingType: BillingType.default("RECURRING"),
+  price: z.number().min(0).max(1_000_000),
 });
-const PlanUpdate = PlanInput.omit({ productId: true }).partial().extend({ active: z.boolean().optional() });
+/** Sin `default` en `billingType`: un PATCH que no lo manda no debe tocar el tipo. */
+const PlanUpdate = z
+  .object({
+    name: z.string().trim().min(2).max(80),
+    billingType: BillingType,
+    price: z.number().min(0).max(1_000_000),
+    active: z.boolean(),
+  })
+  .partial();
 
 export const planView = (p: Plan & { product?: Product }) => ({
   id: p.id,
   productId: p.productId,
   productName: p.product?.name ?? null,
   name: p.name,
-  monthlyPrice: p.monthlyPrice.toFixed(2),
+  price: p.price.toFixed(2),
+  billingType: p.billingType,
   active: p.active,
 });
 
@@ -28,7 +40,7 @@ plansRouter.get(
     const productId = typeof req.query.productId === "string" ? req.query.productId : undefined;
     const plans = await db.plan.findMany({
       where: productId ? { productId } : undefined,
-      orderBy: [{ active: "desc" }, { monthlyPrice: "asc" }],
+      orderBy: [{ active: "desc" }, { productId: "asc" }, { price: "asc" }],
       include: { product: true, _count: { select: { clients: true } } },
     });
     res.json(plans.map((p) => ({ ...planView(p), clients: p._count.clients })));

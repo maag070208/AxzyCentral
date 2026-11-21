@@ -1,15 +1,17 @@
 import { Router } from "express";
+import { Prisma } from "@prisma/client";
 import type { Client, Device, Payment, Plan, Product } from "@prisma/client";
 import { z } from "zod";
 import { db } from "../db";
 import { asyncHandler, HttpError } from "../errors";
+import { nextChargeFor } from "../lib/charges";
+import { dateOnly, fromDateOnly } from "../lib/recurrence";
 import { newDeviceCode } from "../lib/tokens";
 import { planView } from "./plans";
 import { productView } from "./products";
 
 const DateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha AAAA-MM-DD");
-const toDate = (d: string) => new Date(`${d}T00:00:00.000Z`);
-const dateOnly = (d: Date) => d.toISOString().slice(0, 10);
+const toDate = fromDateOnly;
 const optionalText = (max: number) => z.string().trim().max(max).nullish().transform((v) => v || null);
 
 const ClientFields = z.object({
@@ -24,18 +26,41 @@ const ClientInput = ClientFields.extend({ productId: z.string().uuid() });
 /** El producto no se cambia: sus planes y licencias son de ese producto. */
 const ClientUpdate = ClientFields.partial().extend({ status: z.enum(["ACTIVE", "SUSPENDED"]).optional() });
 
-const PaymentInput = z.object({
-  period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Periodo AAAA-MM"),
-  amount: z.number().positive().max(1_000_000),
-  dueDate: DateOnly,
-  notes: optionalText(500),
-});
+const Period = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Periodo AAAA-MM");
+
+/**
+ * Cobro manual. `period` es obligatorio en los recurrentes y en los únicos se
+ * ignora (viven sin periodo; el unique `(clientId, period)` no choca porque
+ * varios NULL conviven en PostgreSQL).
+ */
+const PaymentInput = z
+  .object({
+    kind: z.enum(["RECURRING", "ONE_TIME"]).default("RECURRING"),
+    period: Period.optional(),
+    amount: z.number().positive().max(1_000_000),
+    dueDate: DateOnly,
+    concept: optionalText(200),
+    notes: optionalText(500),
+  })
+  .superRefine((value, ctx) => {
+    if (value.kind === "RECURRING" && !value.period) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["period"], message: "Periodo AAAA-MM requerido para cobros recurrentes" });
+    }
+  });
 const PaymentUpdate = z.object({
   status: z.enum(["PENDING", "PAID", "CANCELLED"]).optional(),
   amount: z.number().positive().max(1_000_000).optional(),
   dueDate: DateOnly.optional(),
+  concept: optionalText(200),
   method: optionalText(40),
   notes: optionalText(500),
+});
+
+/** Datos opcionales para `payments/generate`; sin ellos manda el plan. */
+const GenerateInput = z.object({
+  amount: z.number().positive().max(1_000_000).optional(),
+  dueDate: DateOnly.optional(),
+  concept: optionalText(200),
 });
 
 const DeviceInput = z.object({ name: z.string().trim().min(1).max(60) });
@@ -43,9 +68,11 @@ const DeviceUpdate = z.object({ active: z.boolean() });
 
 type Full = Client & { product: Product; plan: Plan | null; payments: Payment[]; devices: Device[] };
 
-const paymentView = (p: Payment) => ({
+export const paymentView = (p: Payment) => ({
   id: p.id,
+  kind: p.kind,
   period: p.period,
+  concept: p.concept,
   amount: p.amount.toFixed(2),
   dueDate: dateOnly(p.dueDate),
   status: p.status,
@@ -57,8 +84,10 @@ const paymentView = (p: Payment) => ({
 const deviceView = (d: Device) => ({
   id: d.id,
   name: d.name,
+  model: d.model,
   active: d.active,
   lastSeenAt: d.lastSeenAt?.toISOString() ?? null,
+  activatedAt: d.activatedAt?.toISOString() ?? null,
   createdAt: d.createdAt.toISOString(),
 });
 
@@ -110,6 +139,19 @@ const assertAssignable = async (productId: string, planId: string | null | undef
   if (!plan.active) throw new HttpError(409, "PLAN_INACTIVE", "Ese plan está dado de baja");
 };
 
+/** El unique `(clientId, period)` es el que impide dos cobros del mismo mes. */
+const isPeriodConflict = (err: unknown): boolean =>
+  err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
+
+const createPayment = async (data: Prisma.PaymentUncheckedCreateInput) => {
+  try {
+    return await db.payment.create({ data });
+  } catch (err) {
+    if (isPeriodConflict(err)) throw new HttpError(409, "PAYMENT_PERIOD_EXISTS", "Ese periodo ya tiene un cobro para este cliente");
+    throw err;
+  }
+};
+
 export const clientsRouter = Router();
 
 clientsRouter.get(
@@ -157,9 +199,27 @@ clientsRouter.post(
   asyncHandler(async (req, res) => {
     const input = PaymentInput.parse(req.body);
     const t = await findFull(req.params.id);
-    await db.payment.create({
-      data: { clientId: t.id, period: input.period, amount: input.amount, dueDate: toDate(input.dueDate), notes: input.notes },
+    await createPayment({
+      clientId: t.id,
+      kind: input.kind,
+      period: input.kind === "RECURRING" ? input.period! : null,
+      concept: input.concept,
+      amount: input.amount,
+      dueDate: toDate(input.dueDate),
+      notes: input.notes,
     });
+    res.status(201).json(detail(await findFull(t.id)));
+  })
+);
+
+/** Genera el siguiente cobro según el plan del cliente (recurrente o único). */
+clientsRouter.post(
+  "/:id/payments/generate",
+  asyncHandler(async (req, res) => {
+    const input = GenerateInput.parse(req.body);
+    const t = await findFull(req.params.id);
+    const charge = await nextChargeFor(t, input, new Date());
+    await createPayment({ clientId: t.id, ...charge });
     res.status(201).json(detail(await findFull(t.id)));
   })
 );
@@ -177,6 +237,7 @@ clientsRouter.patch(
         status,
         amount: input.amount,
         dueDate: input.dueDate ? toDate(input.dueDate) : undefined,
+        concept: input.concept,
         method: input.method,
         notes: input.notes,
         paidAt: status === "PAID" ? payment.paidAt ?? new Date() : null,

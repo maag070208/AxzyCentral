@@ -22,16 +22,11 @@
   --color-axzy-mist: #9aa6b8;
 }
 
-:root[data-it-appearance="flat"] {
-  --it-layout-bg: #fafafa;
-}
-
-:root.dark[data-it-appearance="flat"] {
-  --it-layout-bg: #141b26;
-}
-
+/* El lienzo del bento lo define el kit (`--it-layout-bg`: gris claro / azul noche).
+   Se pinta también en `body` para que la carga inicial y el login no destellen blanco. */
 body {
   font-family: var(--font-sans);
+  background-color: var(--it-layout-bg, #f4f4f6);
 }
 
 .axc-eyebrow {
@@ -39,4 +34,78 @@ body {
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+}
+
+/* Entrada del mosaico: las tarjetas suben y aparecen en cascada. */
+@keyframes axc-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.axc-rise,
+.axc-stagger > * {
+  animation: axc-rise 0.6s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+.axc-stagger > *:nth-child(2) { animation-delay: 70ms; }
+.axc-stagger > *:nth-child(3) { animation-delay: 140ms; }
+.axc-stagger > *:nth-child(4) { animation-delay: 210ms; }
+.axc-stagger > *:nth-child(5) { animation-delay: 280ms; }
+.axc-stagger > *:nth-child(6) { animation-delay: 350ms; }
+.axc-stagger > *:nth-child(7) { animation-delay: 420ms; }
+.axc-stagger > *:nth-child(8) { animation-delay: 490ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .axc-rise,
+  .axc-stagger > * {
+    animation: none;
+  }
+}
+
+/* La tira bento pinta la etiqueta y la bajada con una tinta fija por tono; en
+   modo oscuro el fondo del tono también se oscurece y el texto queda ilegible.
+   Se hereda el color del bloque, que sí se adapta al tema. */
+.dark .it-bento-statstrip__item[class*="it-bento-statstrip__item--"] .it-bento-statstrip__label,
+.dark .it-bento-statstrip__item[class*="it-bento-statstrip__item--"] .it-bento-statstrip__caption {
+  color: inherit;
+  opacity: 0.82;
+}
+
+/* En móvil la tira bento pone la cifra y su bajada en la misma línea y los
+   recorta. Se deja bajar la bajada y se reduce la cifra para que quepan las dos. */
+@media (max-width: 640px) {
+  .it-bento-statstrip__row {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+
+  .it-bento-statstrip__value {
+    font-size: 26px;
+    letter-spacing: -0.03em;
+  }
+
+  .it-bento-statstrip__caption {
+    white-space: normal;
+  }
+}
+
+/* El provider inyecta `h1, h2, h3 { color: var(--color-heading-default) }` sin
+   capa de CSS, así que pisa el color de la etiqueta de los tiles (que el kit
+   define en su capa). Se restituye el color del tono y se conservan los títulos
+   de página/sección con la tinta del tema. */
+.it-bento-tile__label {
+  color: var(--it-bento-muted) !important;
+}
+
+/* Foco visible consistente sobre el lienzo bento (tiles y tarjetas clicables). */
+.it-bento-tile[role="button"]:focus-visible,
+.it-bento-statstrip__item:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }

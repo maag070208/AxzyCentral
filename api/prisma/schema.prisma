@@ -34,17 +34,25 @@ model Product {
   @@map("products")
 }
 
+/// Cómo se cobra un plan: cada mes (RECURRING) o una sola vez (ONE_TIME).
+enum BillingType {
+  RECURRING
+  ONE_TIME
+}
+
 model Plan {
-  id           String   @id @default(uuid())
-  productId    String
-  product      Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
-  name         String
-  monthlyPrice Decimal  @db.Decimal(10, 2)
+  id          String      @id @default(uuid())
+  productId   String
+  product     Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  name        String
+  /// Precio mensual si `billingType` es RECURRING; precio único si es ONE_TIME.
+  price       Decimal     @db.Decimal(10, 2)
+  billingType BillingType @default(RECURRING)
   /// Un plan dado de baja ya no se asigna; quien lo tiene lo conserva.
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  clients      Client[]
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  clients     Client[]
 
   @@unique([productId, name])
   @@map("plans")
@@ -83,13 +91,22 @@ enum PaymentStatus {
   CANCELLED
 }
 
-/// Cobro mensual. El PENDING más antiguo define hasta cuándo la app trabaja sin internet.
+/// Cómo se cobra un pago: por periodo mensual (RECURRING) o una sola vez (ONE_TIME).
+enum PaymentKind {
+  RECURRING
+  ONE_TIME
+}
+
+/// Cobro. El PENDING más antiguo define hasta cuándo la app trabaja sin internet.
 model Payment {
   id        String        @id @default(uuid())
   clientId  String
   client    Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  /// Periodo cobrado `YYYY-MM`.
-  period    String
+  kind      PaymentKind   @default(RECURRING)
+  /// Periodo cobrado `YYYY-MM`; nulo en los cobros únicos.
+  period    String?
+  /// Texto libre del cobro (p. ej. "Instalación y capacitación").
+  concept   String?
   amount    Decimal       @db.Decimal(10, 2)
   dueDate   DateTime      @db.Date
   status    PaymentStatus @default(PENDING)
@@ -101,19 +118,24 @@ model Payment {
 
   @@unique([clientId, period])
   @@index([clientId, status, dueDate])
+  @@index([clientId, kind])
   @@map("payments")
 }
 
 /// Licencia de un dispositivo del cliente (p. ej. la tablet de cocina). El código en claro solo se muestra al crearlo; aquí vive su hash.
 model Device {
-  id         String    @id @default(uuid())
-  clientId   String
-  client     Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  name       String
-  tokenHash  String    @unique
-  active     Boolean   @default(true)
-  lastSeenAt DateTime?
-  createdAt  DateTime  @default(now())
+  id          String    @id @default(uuid())
+  clientId    String
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name        String
+  /// Modelo del teléfono/tablet que se dio de alta (p. ej. "SAMSUNG SM-T290").
+  model       String?
+  tokenHash   String    @unique
+  active      Boolean   @default(true)
+  lastSeenAt  DateTime?
+  /// Primera activación real desde la app (no el alta en la consola).
+  activatedAt DateTime?
+  createdAt   DateTime  @default(now())
 
   @@index([clientId])
   @@map("devices")

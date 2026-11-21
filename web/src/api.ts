@@ -4,6 +4,13 @@ const TOKEN_KEY = "axc_token";
 export type Status = "ACTIVE" | "SUSPENDED";
 export type PaymentStatus = "PENDING" | "PAID" | "CANCELLED";
 
+/** Forma de cobro de un plan y de un cobro (valor del enum del API). */
+export type BillingType = "RECURRING" | "ONE_TIME";
+export type PaymentKind = BillingType;
+
+/** Clave del producto que consume la app de taquería; viaja dentro del QR. */
+export const QR_PRODUCT = "TAQUERIA";
+
 export interface Product {
   id: string;
   key: string;
@@ -19,14 +26,19 @@ export interface Plan {
   productId: string;
   productName: string | null;
   name: string;
-  monthlyPrice: string;
+  /** Precio mensual si `billingType` es RECURRING; precio único si es ONE_TIME. */
+  price: string;
+  billingType: BillingType;
   active: boolean;
   clients?: number;
 }
 
 export interface Payment {
   id: string;
-  period: string;
+  kind: PaymentKind;
+  /** `AAAA-MM` en recurrente; `null` en cobros únicos. */
+  period: string | null;
+  concept: string | null;
   amount: string;
   dueDate: string;
   status: PaymentStatus;
@@ -38,8 +50,12 @@ export interface Payment {
 export interface Device {
   id: string;
   name: string;
+  /** Modelo del equipo con el que se activó. */
+  model: string | null;
   active: boolean;
   lastSeenAt: string | null;
+  /** Primera activación real desde la app. */
+  activatedAt: string | null;
   createdAt: string;
 }
 
@@ -65,10 +81,90 @@ export interface ClientDetail extends Omit<ClientSummary, "devices"> {
   devices: Device[];
 }
 
+/** Fila de la pantalla global de cobros (`GET /payments`). */
+export interface PaymentRow {
+  id: string;
+  clientId: string;
+  clientName: string;
+  productName: string;
+  planName: string | null;
+  kind: PaymentKind;
+  period: string | null;
+  concept: string | null;
+  amount: string;
+  dueDate: string;
+  status: PaymentStatus;
+  paidAt: string | null;
+  method: string | null;
+}
+
+export interface BillingRunCharge {
+  clientId: string;
+  clientName: string;
+  period: string | null;
+  dueDate: string;
+  amount: string;
+}
+
+export interface BillingRun {
+  created: number;
+  skipped: number;
+  charges: BillingRunCharge[];
+}
+
+export interface ApiConfig {
+  apiUrl: string;
+}
+
+/** Respuesta de crear/rotar el código de un dispositivo. */
+export interface IssuedDevice {
+  device: Device;
+  code: string;
+}
+
 export interface Me {
   id: string;
   username: string;
   name: string;
+}
+
+export interface NewPaymentBody {
+  kind: PaymentKind;
+  /** Solo recurrente (`AAAA-MM`); en único se omite. */
+  period?: string | null;
+  amount: number;
+  dueDate: string;
+  concept?: string | null;
+  notes?: string | null;
+}
+
+export interface GeneratePaymentBody {
+  amount?: number;
+  dueDate?: string;
+  concept?: string;
+}
+
+export interface PlanBody {
+  productId: string;
+  name: string;
+  billingType?: BillingType;
+  price: number;
+}
+
+export interface PlanPatch {
+  name?: string;
+  billingType?: BillingType;
+  price?: number;
+  active?: boolean;
+}
+
+export interface PaymentPatch {
+  status?: PaymentStatus;
+  method?: string | null;
+  concept?: string | null;
+  amount?: number;
+  dueDate?: string;
+  notes?: string | null;
 }
 
 export class ApiError extends Error {
@@ -123,6 +219,70 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
   return data as T;
 }
 
+/* ------------------------------------------------------------------ */
+/* Endpoints del contrato §5                                           */
+/* ------------------------------------------------------------------ */
+
+const query = (params: Record<string, string | undefined>) => {
+  const entries = Object.entries(params).filter(([, value]) => value !== undefined && value !== "");
+  return entries.length ? `?${new URLSearchParams(entries as [string, string][]).toString()}` : "";
+};
+
+/** URL pública del API que viaja dentro del QR (`GET /config`). */
+export const getConfig = () => api<ApiConfig>("GET", "/config");
+
+/**
+ * URL del API para el payload del QR: la de `GET /config` y, si el endpoint
+ * todavía no existe, el mismo origen con el que habla la consola.
+ */
+export async function activationApiUrl(): Promise<string> {
+  try {
+    const { apiUrl } = await getConfig();
+    if (apiUrl) return apiUrl.replace(/\/+$/, "");
+  } catch {
+    /* API vieja sin /config: seguimos con el origen local */
+  }
+  return new URL(BASE, window.location.origin).toString().replace(/\/+$/, "");
+}
+
+/** Payload compacto del QR (§6.1). `productKey` es el producto del cliente. */
+export const qrPayload = (apiUrl: string, code: string, productKey: string = QR_PRODUCT) =>
+  JSON.stringify({ v: 1, u: apiUrl.replace(/\/+$/, ""), c: code, p: productKey });
+
+export const listPayments = (filters: { status?: PaymentStatus | ""; kind?: PaymentKind | ""; clientId?: string } = {}) =>
+  api<PaymentRow[]>(
+    "GET",
+    `/payments${query({ status: filters.status || undefined, kind: filters.kind || undefined, clientId: filters.clientId })}`
+  );
+
+/** Genera cobros de todos los clientes activos con plan recurrente. */
+export const runBilling = () => api<BillingRun>("POST", "/billing/run");
+
+/** Genera el siguiente cobro del cliente según su plan. */
+export const generatePayment = (clientId: string, body: GeneratePaymentBody = {}) =>
+  api<ClientDetail>("POST", `/clients/${clientId}/payments/generate`, body);
+
+export const createPayment = (clientId: string, body: NewPaymentBody) =>
+  api<ClientDetail>("POST", `/clients/${clientId}/payments`, body);
+
+export const updatePayment = (clientId: string, paymentId: string, patch: PaymentPatch) =>
+  api<ClientDetail>("PATCH", `/clients/${clientId}/payments/${paymentId}`, patch);
+
+/** Alta de un dispositivo con su código de activación (se muestra una vez). */
+export const issueDevice = (clientId: string, name: string) =>
+  api<IssuedDevice>("POST", `/clients/${clientId}/devices`, { name });
+
+/** Rota el código de un dispositivo existente. */
+export const rotateDeviceCode = (clientId: string, deviceId: string) =>
+  api<IssuedDevice>("POST", `/clients/${clientId}/devices/${deviceId}/code`);
+
+export const setDeviceActive = (clientId: string, deviceId: string, active: boolean) =>
+  api("PATCH", `/clients/${clientId}/devices/${deviceId}`, { active });
+
+/* ------------------------------------------------------------------ */
+/* Formato compartido                                                  */
+/* ------------------------------------------------------------------ */
+
 export const money = (value: string | number) =>
   Number(value).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 
@@ -140,3 +300,25 @@ export const agoText = (iso: string | null) => {
   if (h < 24) return `Hace ${h} h`;
   return `Hace ${Math.round(h / 24)} días`;
 };
+
+/** `AAAA-MM` → «nov 2026». */
+export const periodText = (period: string | null) =>
+  period ? new Date(`${period}-01T12:00:00`).toLocaleDateString("es-MX", { month: "short", year: "numeric" }) : "Sin periodo";
+
+export const billingTypeLabel = (type: BillingType) => (type === "ONE_TIME" ? "Pago único" : "Recurrente");
+
+/** «Mensual» / «Único»: etiqueta corta para píldoras y tablas. */
+export const billingTypeShort = (type: BillingType) => (type === "ONE_TIME" ? "Único" : "Mensual");
+
+/** Precio con su sufijo según el tipo de cobro. */
+export const planPrice = (plan: Pick<Plan, "price" | "billingType">) =>
+  `${money(plan.price)}${plan.billingType === "RECURRING" ? " /mes" : ""}`;
+
+/** Precio ya formateado para una tarjeta o tabla. */
+export const priceWithSuffix = (price: string | number, type: BillingType) =>
+  `${money(price)}${type === "RECURRING" ? " /mes" : " único"}`;
+
+/** Texto principal de un cobro: su concepto o, si falta, el periodo. */
+export const paymentConcept = (payment: Pick<Payment, "kind" | "concept" | "period">) =>
+  payment.concept?.trim() ||
+  (payment.kind === "ONE_TIME" ? "Pago único" : payment.period ? periodText(payment.period) : "Sin periodo");

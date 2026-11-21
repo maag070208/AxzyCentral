@@ -1,15 +1,64 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ITButton, ITCard, ITEmptyState, ITPage, ITStatCard, ITText } from "@axzydev/axzy_ui_system";
-import { LuCircleAlert, LuLayoutDashboard, LuPlus, LuUserCheck, LuUserX, LuWallet } from "react-icons/lu";
-import { agoText, api, dateText, money, type ClientSummary, type Product } from "../api";
-import { Eyebrow, StatusBadge, errorOf } from "../shared";
+import {
+  ITBentoFeed,
+  ITBentoGrid,
+  ITBentoPill,
+  ITBentoPillRow,
+  ITBentoStatStrip,
+  ITBentoTile,
+  ITButton,
+  ITConfirmDialog,
+  ITEmptyState,
+  ITPage,
+  ITText,
+} from "@axzydev/axzy_ui_system";
+import {
+  LuArrowRight,
+  LuBoxes,
+  LuCircleAlert,
+  LuLayoutDashboard,
+  LuPlus,
+  LuReceipt,
+  LuRefreshCw,
+  LuShieldAlert,
+  LuTriangleAlert,
+  LuUserCheck,
+  LuUserX,
+  LuWallet,
+  LuZap,
+} from "react-icons/lu";
+import {
+  api,
+  dateText,
+  money,
+  runBilling,
+  type ClientSummary,
+  type Product,
+} from "../api";
+import { CountUp, CountUpMoney, SectionTitle, errorOf } from "../shared";
+import { useNotify } from "../toast";
+
+const TONES = ["mint", "lavender", "sun", "plain"] as const;
+
+/** Entrada del hilo de actividad (forma que espera `ITBentoFeed`). */
+type FeedItem = {
+  id: string;
+  icon?: React.ReactNode;
+  title: string;
+  meta?: string;
+  tone?: "success" | "violet" | "neutral";
+  href?: string;
+};
 
 export default function Home() {
   const navigate = useNavigate();
+  const notify = useNotify();
   const [clients, setClients] = useState<ClientSummary[] | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [error, setError] = useState("");
+  const [runs, setRuns] = useState(false);
+  const [confirmRun, setConfirmRun] = useState(false);
 
   const load = () => {
     setError("");
@@ -25,24 +74,148 @@ export default function Home() {
   const stats = useMemo(() => {
     const rows = clients ?? [];
     const active = rows.filter((c) => c.status === "ACTIVE");
+    const withPlan = active.filter((c) => c.plan);
+    const recurring = withPlan.filter((c) => c.plan?.billingType === "RECURRING");
+    const oneTimeActive = withPlan.filter((c) => c.plan?.billingType === "ONE_TIME").length;
     return {
-      active: active.length,
+      rows,
+      active,
       suspended: rows.length - active.length,
-      overdue: rows.filter((c) => c.overdue).length,
-      monthly: active.reduce((sum, c) => sum + Number(c.plan?.monthlyPrice ?? 0), 0),
-      attention: rows.filter((c) => c.overdue || (c.status === "ACTIVE" && c.devices.active === 0)),
+      overdue: rows.filter((c) => c.overdue),
+      mrr: recurring.reduce((sum, c) => sum + Number(c.plan?.price ?? 0), 0),
+      recurringClients: recurring.length,
+      oneTimeActive,
+      planned: withPlan.length,
     };
   }, [clients]);
+
+  const attention = useMemo(
+    () => stats.rows.filter((c) => c.overdue || c.status === "SUSPENDED" || c.devices.active === 0),
+    [stats.rows]
+  );
+
+  const feedGroups = useMemo(() => {
+    const groups: { key: string; label: string; items: FeedItem[] }[] = [];
+    const push = (key: string, label: string, items: ClientSummary[], tone: FeedItem["tone"], icon: React.ReactNode) => {
+      if (items.length === 0) return;
+      groups.push({
+        key,
+        label,
+        items: items.map((c) => ({
+          id: c.id,
+          icon,
+          title: c.name,
+          meta: `${c.product.name} · ${c.plan?.name ?? "sin plan"}`,
+          tone,
+          href: `/clientes/${c.id}`,
+        })),
+      });
+    };
+    push("overdue", "Pagos vencidos", stats.overdue, "neutral", <LuCircleAlert size={13} />);
+    push(
+      "licenses",
+      "Licencias sin activar",
+      stats.rows.filter((c) => c.status === "ACTIVE" && c.devices.active === 0 && !c.overdue),
+      "violet",
+      <LuShieldAlert size={13} />
+    );
+    push(
+      "suspended",
+      "Cuentas suspendidas",
+      stats.rows.filter((c) => c.status === "SUSPENDED" && !c.overdue),
+      "neutral",
+      <LuUserX size={13} />
+    );
+    return groups;
+  }, [stats]);
+
+  const activeProducts = products.filter((p) => p.active);
+  const productCols = activeProducts.length <= 1 ? 12 : activeProducts.length === 2 ? 6 : 4;
+
+  const nextDue = useMemo(() => {
+    const withDue = stats.rows
+      .filter((c) => c.nextDueDate)
+      .sort((a, b) => (a.nextDueDate ?? "").localeCompare(b.nextDueDate ?? ""));
+    return withDue[0] ?? null;
+  }, [stats.rows]);
+
+  const generateDebts = async () => {
+    setConfirmRun(false);
+    setRuns(true);
+    try {
+      const result = await runBilling();
+      notify(
+        result.created > 0
+          ? `Cobros generados: ${result.created}. Omitidos: ${result.skipped}.`
+          : `Sin cobros nuevos: ${result.skipped} cliente(s) ya estaban al día o no son recurrentes.`,
+        result.created > 0 ? "success" : "error"
+      );
+      load();
+    } catch (e) {
+      notify(errorOf(e), "error");
+    } finally {
+      setRuns(false);
+    }
+  };
+
+  const stripItems = [
+    {
+      id: "active",
+      label: "Clientes activos",
+      value: <CountUp value={stats.active.length} />,
+      caption: `de ${stats.rows.length}`,
+      color: "var(--color-success)",
+      tone: "mint" as const,
+    },
+    {
+      id: "suspended",
+      label: "Suspendidos",
+      value: <CountUp value={stats.suspended} />,
+      caption: "apps bloqueadas",
+      color: "var(--color-danger)",
+      tone: "lavender" as const,
+    },
+    {
+      id: "overdue",
+      label: "Con pago vencido",
+      value: <CountUp value={stats.overdue.length} />,
+      caption: "por cobrar",
+      color: "var(--color-warning)",
+      tone: "sun" as const,
+    },
+    {
+      id: "mrr",
+      label: "Ingreso mensual",
+      value: <CountUpMoney value={stats.mrr} />,
+      caption: "MRR",
+      color: "var(--color-primary)",
+      tone: "sea" as const,
+    },
+  ];
 
   return (
     <ITPage
       title="Inicio"
-      description="Cómo van tus clientes en todos tus productos."
+      description="Cómo van tus clientes, tus cobros y tus licencias."
       icon={<LuLayoutDashboard size={20} />}
       loading={clients === null && !error}
       error={error || undefined}
       onRetry={load}
-      actions={<ITButton icon={<LuPlus size={14} />} onClick={() => navigate("/clientes?nuevo=1")}>Nuevo cliente</ITButton>}
+      actions={
+        <div className="hidden flex-wrap items-center gap-2 sm:flex">
+          <ITButton
+            variant="outlined"
+            icon={runs ? <LuRefreshCw size={14} className="animate-spin" /> : <LuReceipt size={14} />}
+            onClick={() => setConfirmRun(true)}
+            disabled={runs || !clients?.length}
+          >
+            {runs ? "Generando…" : "Generar cobros del mes"}
+          </ITButton>
+          <ITButton icon={<LuPlus size={14} />} onClick={() => navigate("/clientes?nuevo=1")}>
+            Nuevo cliente
+          </ITButton>
+        </div>
+      }
     >
       {clients && clients.length === 0 ? (
         <ITEmptyState
@@ -51,75 +224,191 @@ export default function Home() {
           action={<ITButton onClick={() => navigate("/clientes?nuevo=1")}>Dar de alta un cliente</ITButton>}
         />
       ) : (
-        <div className="flex flex-col gap-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <ITStatCard label="Clientes activos" value={stats.active} icon={<LuUserCheck size={18} />} />
-            <ITStatCard label="Suspendidos" value={stats.suspended} icon={<LuUserX size={18} />} />
-            <ITStatCard label="Con pago vencido" value={stats.overdue} icon={<LuCircleAlert size={18} />} />
-            <ITStatCard label="Ingreso mensual" value={money(stats.monthly)} hint="Planes de clientes activos" icon={<LuWallet size={18} />} />
-          </div>
+        <div className="flex flex-col gap-7">
+          <ITBentoStatStrip
+            items={stripItems}
+            onSelect={(id) => {
+              if (id === "mrr") navigate("/planes");
+              else if (id === "overdue") navigate("/cobros");
+              else navigate("/clientes");
+            }}
+          />
 
           <section aria-labelledby="por-producto">
-            <Eyebrow>01 — Por producto</Eyebrow>
-            <h2 id="por-producto" className="mt-1 mb-3 text-xl font-bold tracking-tight">Productos</h2>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {products.filter((p) => p.active).map((p) => {
-                const rows = (clients ?? []).filter((c) => c.product.id === p.id);
-                const active = rows.filter((c) => c.status === "ACTIVE");
-                return (
-                  <ITCard key={p.id} title={p.name} onClick={() => navigate(`/clientes?producto=${p.id}`)}>
-                    <p className="font-mono text-xs text-axzy-slate dark:text-axzy-mist">{p.key}</p>
-                    <div className="mt-3 flex items-end justify-between gap-2">
-                      <div>
-                        <p className="text-3xl font-bold tabular-nums">{active.length}</p>
-                        <ITText muted className="text-sm">activos de {rows.length}</ITText>
-                      </div>
-                      <p className="text-right font-semibold tabular-nums">
-                        {money(active.reduce((s, c) => s + Number(c.plan?.monthlyPrice ?? 0), 0))}
-                        <span className="block text-xs font-normal text-axzy-slate dark:text-axzy-mist">al mes</span>
-                      </p>
-                    </div>
-                  </ITCard>
-                );
-              })}
-            </div>
+            <SectionTitle
+              id="por-producto"
+              eyebrow="01 — Por producto"
+              title="Productos"
+              description="Clientes activos y monto mensual de cada producto."
+              action={
+                activeProducts.length > 0 && (
+                  <ITButton size="sm" variant="text" color="gray" onClick={() => navigate("/productos")}>
+                    <span className="inline-flex items-center gap-1">
+                      Ver productos <LuArrowRight size={13} />
+                    </span>
+                  </ITButton>
+                )
+              }
+            />
+            {activeProducts.length === 0 ? (
+              <ITEmptyState
+                icon={<LuBoxes size={28} />}
+                title="Sin productos activos"
+                description="Da de alta un producto para poder venderlo."
+                action={<ITButton onClick={() => navigate("/productos")}>Ir a productos</ITButton>}
+              />
+            ) : (
+              <ITBentoGrid className="axc-stagger">
+                {activeProducts.map((p, i) => {
+                  const rows = stats.rows.filter((c) => c.product.id === p.id);
+                  const active = rows.filter((c) => c.status === "ACTIVE");
+                  const monthly = active.reduce(
+                    (sum, c) => sum + (c.plan?.billingType === "RECURRING" ? Number(c.plan.price) : 0),
+                    0
+                  );
+                  const tileTone = TONES[i % TONES.length];
+                  return (
+                    <ITBentoTile
+                      key={p.id}
+                      cols={productCols}
+                      rows={2}
+                      tone={tileTone}
+                      icon={<LuBoxes size={15} />}
+                      label={p.name}
+                      value={<CountUp value={active.length} />}
+                      caption={`de ${rows.length} · ${money(monthly)}/mes`}
+                      onClick={() => navigate(`/clientes?producto=${p.id}`)}
+                    >
+                      <ITBentoPillRow className="mt-2">
+                        <ITBentoPill>{p.key}</ITBentoPill>
+                        <ITBentoPill dot="var(--color-success)">
+                          {rows.length - active.length} suspendido{rows.length - active.length === 1 ? "" : "s"}
+                        </ITBentoPill>
+                      </ITBentoPillRow>
+                    </ITBentoTile>
+                  );
+                })}
+              </ITBentoGrid>
+            )}
           </section>
 
-          <section aria-labelledby="atencion">
-            <Eyebrow>02 — Pendientes</Eyebrow>
-            <h2 id="atencion" className="mt-1 mb-3 text-xl font-bold tracking-tight">Requieren atención</h2>
-            {stats.attention.length === 0 ? (
-              <ITCard><ITText muted>Todo en orden: sin pagos vencidos ni licencias sin activar.</ITText></ITCard>
-            ) : (
-              <ul className="divide-y divide-slate-200 rounded-[14px] border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
-                {stats.attention.map((c) => (
-                  <li key={c.id}>
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/clientes/${c.id}`)}
-                      className="flex w-full flex-wrap items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-primary-700 dark:hover:bg-slate-800"
-                    >
-                      <span className="min-w-40 flex-1">
-                        <span className="block font-semibold">{c.name}</span>
-                        <span className="block text-xs text-axzy-slate dark:text-axzy-mist">{c.product.name}</span>
-                      </span>
-                      <StatusBadge status={c.status} />
-                      <span className="text-sm">
-                        {c.overdue ? (
-                          <span className="font-semibold text-red-700 dark:text-red-400">Pago vencido desde {dateText(c.nextDueDate)}</span>
-                        ) : (
-                          <span className="text-amber-800 dark:text-amber-400">Licencia sin activar</span>
-                        )}
-                      </span>
-                      <span className="w-full text-xs text-axzy-slate sm:w-auto dark:text-axzy-mist">Última conexión: {agoText(c.lastSeenAt)}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+          <section aria-labelledby="requieren-atencion">
+            <SectionTitle
+              id="requieren-atencion"
+              eyebrow="02 — Pendientes"
+              title="Requieren atención"
+              description="Pagos vencidos, licencias sin activar y cuentas suspendidas."
+            />
+            <ITBentoGrid className="axc-stagger">
+              <ITBentoTile
+                cols={8}
+                rows={3}
+                icon={<LuTriangleAlert size={15} />}
+                label="Clientes con algo pendiente"
+                value={<CountUp value={attention.length} />}
+                caption={attention.length === 0 ? "todo en orden" : "por revisar"}
+              >
+                <div className="mt-2 min-h-0 flex-1">
+                  {feedGroups.length === 0 ? (
+                    <div className="flex h-full min-h-24 flex-col items-center justify-center gap-1 rounded-2xl bg-[color-mix(in_srgb,currentColor_5%,transparent)] p-4 text-center">
+                      <LuUserCheck size={22} className="text-[color:var(--color-success)]" aria-hidden />
+                      <p className="text-sm font-semibold">Todo en orden</p>
+                      <p className="text-xs" style={{ color: "var(--it-bento-muted)" }}>
+                        Sin pagos vencidos ni licencias sin activar.
+                      </p>
+                    </div>
+                  ) : (
+                    <ITBentoFeed
+                      groups={feedGroups}
+                      maxHeight={224}
+                      onItemClick={(item) => navigate(item.href ?? `/clientes/${item.id}`)}
+                    />
+                  )}
+                </div>
+              </ITBentoTile>
+
+              <ITBentoTile cols={4} rows={3} icon={<LuZap size={15} />} label="Acciones rápidas">
+                <div className="mt-3 flex flex-1 flex-col gap-2">
+                  <ITButton
+                    variant="outlined"
+                    icon={<LuPlus size={14} />}
+                    onClick={() => navigate("/clientes?nuevo=1")}
+                    className="w-full justify-start"
+                  >
+                    Nuevo cliente
+                  </ITButton>
+                  <ITButton
+                    variant="outlined"
+                    icon={runs ? <LuRefreshCw size={14} className="animate-spin" /> : <LuReceipt size={14} />}
+                    onClick={() => setConfirmRun(true)}
+                    disabled={runs}
+                    className="w-full justify-start"
+                  >
+                    {runs ? "Generando cobros…" : "Generar cobros del mes"}
+                  </ITButton>
+                  <ITButton
+                    variant="outlined"
+                    color="gray"
+                    icon={<LuWallet size={14} />}
+                    onClick={() => navigate("/cobros")}
+                    className="w-full justify-start"
+                  >
+                    Revisar cobros
+                  </ITButton>
+                  <ITText muted className="mt-auto text-xs">
+                    {stats.oneTimeActive > 0
+                      ? `${stats.oneTimeActive} cliente(s) con plan de pago único: ya tienen su cargo inicial.`
+                      : "Los cobros del mes se generan solo para planes recurrentes sin pago pendiente."}
+                  </ITText>
+                </div>
+              </ITBentoTile>
+            </ITBentoGrid>
+          </section>
+
+          <section aria-label="Resumen de cartera">
+            <ITBentoGrid className="axc-stagger">
+              <ITBentoTile
+                cols={4}
+                rows={2}
+                tone="plain"
+                icon={<LuUserCheck size={15} />}
+                label="Clientes con plan"
+                value={<CountUp value={stats.planned} />}
+                caption={stats.active.length > 0 ? `${Math.round((stats.planned / stats.active.length) * 100)}% de los activos` : "sin activos"}
+              />
+              <ITBentoTile
+                cols={4}
+                rows={2}
+                icon={<LuReceipt size={15} />}
+                label="Planes recurrentes"
+                value={<CountUp value={stats.recurringClients} />}
+                caption={`${money(stats.mrr)} al mes`}
+                onClick={() => navigate("/planes")}
+              />
+              <ITBentoTile
+                cols={4}
+                rows={2}
+                icon={<LuCircleAlert size={15} />}
+                label="Próximo vencimiento"
+                value={<span className="text-[22px]">{nextDue ? dateText(nextDue.nextDueDate) : "—"}</span>}
+                caption={nextDue ? nextDue.name : "Sin cobros pendientes"}
+                onClick={() => navigate("/cobros")}
+              />
+            </ITBentoGrid>
           </section>
         </div>
       )}
+
+      <ITConfirmDialog
+        isOpen={confirmRun}
+        onClose={() => setConfirmRun(false)}
+        onConfirm={() => void generateDebts()}
+        title="¿Generar cobros del mes?"
+        message="Se crea el siguiente cobro pendiente de cada cliente activo con plan recurrente. Se omiten los que ya tienen un pago pendiente y los planes de pago único."
+        confirmLabel="Generar cobros"
+        cancelLabel="Cancelar"
+        variant="primary"
+      />
     </ITPage>
   );
 }

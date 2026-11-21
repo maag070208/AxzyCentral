@@ -5,10 +5,12 @@ import { config } from "./config";
 import { requireAdmin } from "./auth";
 import { errorHandler } from "./errors";
 import { authRouter } from "./routes/auth";
-import { licenseRouter } from "./routes/license";
+import { activateRouter, licenseRouter } from "./routes/license";
+import { configRouter } from "./routes/config";
 import { plansRouter } from "./routes/plans";
 import { clientsRouter } from "./routes/clients";
 import { productsRouter } from "./routes/products";
+import { billingRouter, paymentsRouter } from "./routes/payments";
 
 export const createApp = () => {
   const app = express();
@@ -22,11 +24,17 @@ export const createApp = () => {
   });
 
   const api = express.Router();
-  api.use("/auth", authRouter);
+  // Públicas: la app de taquería y la consola antes de iniciar sesión.
+  api.use("/config", configRouter);
+  api.use("/activate", activateRouter);
   api.use("/license", licenseRouter);
+  api.use("/auth", authRouter);
+  // Administrativas: requieren sesión de la consola.
   api.use("/products", requireAdmin, productsRouter);
   api.use("/plans", requireAdmin, plansRouter);
   api.use("/clients", requireAdmin, clientsRouter);
+  api.use("/payments", requireAdmin, paymentsRouter);
+  api.use("/billing", requireAdmin, billingRouter);
   app.use("/api/v1", api);
 
   app.use((_req, res) => {

@@ -7,6 +7,12 @@ const Env = z.object({
   PORT: z.coerce.number().int().default(4100),
   WEB_ORIGIN: z.string().default("http://localhost:5100"),
   NODE_ENV: z.string().default("development"),
+  /// URL pública del API que viaja dentro del QR de activación. Opcional: si no
+  /// está, se deriva de la petición (`req.protocol` + `Host`).
+  PUBLIC_API_URL: z.preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+    z.string().trim().url("PUBLIC_API_URL debe ser una URL").optional()
+  ),
 });
 
 export const config = Env.parse(process.env);
