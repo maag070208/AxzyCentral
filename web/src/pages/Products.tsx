@@ -1,37 +1,36 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  ITBadget,
-  ITBentoPill,
-  ITBentoPillRow,
-  ITBentoStatStrip,
-  ITButton,
-  ITCard,
-  ITEmptyState,
-  ITInput,
-  ITPage,
-  ITText,
-} from "@axzydev/axzy_ui_system";
-import { LuBoxes, LuPlus } from "react-icons/lu";
+import { ITBadget, ITButton, ITDialog, ITInput, ITText } from "@axzydev/axzy_ui_system";
+import { LuBoxes, LuLayers, LuPlus, LuTags, LuUsers } from "react-icons/lu";
 import { api, type Product } from "../api";
 import { useNotify } from "../toast";
-import { CountUp, SectionTitle, errorOf } from "../shared";
+import { CountUp, errorOf } from "../shared";
+import { Card, Empty, Page, StatCard } from "../ui";
 
 const EMPTY = { key: "", name: "", description: "" };
-const TONES = ["primary", "info", "success", "ternary"] as const;
+
+const TONE = [
+  "bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
+  "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
+  "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
+  "bg-violet-50 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300",
+];
 
 export default function Products() {
   const navigate = useNavigate();
   const notify = useNotify();
   const [products, setProducts] = useState<Product[] | null>(null);
   const [error, setError] = useState("");
+  const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(EMPTY);
   const [keyTouched, setKeyTouched] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     setError("");
-    api<Product[]>("GET", "/products").then(setProducts).catch((e) => setError(errorOf(e)));
+    api<Product[]>("GET", "/products")
+      .then(setProducts)
+      .catch((e) => setError(errorOf(e)));
   }, []);
   useEffect(load, [load]);
 
@@ -44,12 +43,19 @@ export default function Products() {
       .replace(/^_+|_+$/g, "")
       .slice(0, 40);
 
+  const openCreate = () => {
+    setForm(EMPTY);
+    setKeyTouched(false);
+    setCreating(true);
+  };
+
   const create = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
     try {
       await api("POST", "/products", form);
       notify(`${form.name} agregado`);
+      setCreating(false);
       setForm(EMPTY);
       setKeyTouched(false);
       load();
@@ -81,115 +87,146 @@ export default function Products() {
   }, [products]);
 
   return (
-    <ITPage
+    <Page
+      eyebrow="Catálogo"
       title="Productos"
-      description="Lo que vendes. Cada cliente y cada plan pertenecen a un producto."
-      icon={<LuBoxes size={20} />}
-      loading={products === null && !error}
-      error={error || undefined}
-      onRetry={load}
+      description="Lo que vendes y lo que agrupa a tus clientes y planes. La clave no cambia: las apps la usan para identificarse."
       actions={
-        <ITButton icon={<LuPlus size={14} />} onClick={() => navigate("/planes")}>
-          Ver planes
-        </ITButton>
+        <>
+          <ITButton variant="outlined" icon={<LuTags size={15} />} onClick={() => navigate("/planes")}>
+            Ver planes
+          </ITButton>
+          <ITButton icon={<LuPlus size={15} />} onClick={openCreate}>
+            Nuevo producto
+          </ITButton>
+        </>
       }
+      loading={products === null && !error}
+      error={error || null}
+      onRetry={load}
     >
-      <div className="flex flex-col gap-6">
-        <ITBentoStatStrip
-          items={[
-            { id: "all", label: "Productos", value: <CountUp value={stats.total} />, caption: "en catálogo", color: "var(--color-primary)", tone: "plain" },
-            { id: "active", label: "Activos", value: <CountUp value={stats.active} />, caption: "a la venta", color: "var(--color-success)", tone: "mint" },
-            { id: "clients", label: "Clientes", value: <CountUp value={stats.clients} />, caption: "en todos", color: "var(--color-info)", tone: "lavender" },
-            { id: "plans", label: "Planes", value: <CountUp value={stats.plans} />, caption: "en todos", color: "var(--color-warning)", tone: "sun" },
-          ]}
-        />
-
-        <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
-          <section aria-labelledby="lista-productos">
-            <SectionTitle id="lista-productos" eyebrow="Catálogo" title="Tus productos" />
-            {products && products.length === 0 ? (
-              <ITEmptyState
-                icon={<LuBoxes size={32} />}
-                title="Todavía no hay productos"
-                description="Da de alta el primero para poder venderlo y crearle planes."
-              />
-            ) : (
-              <div className="axc-stagger grid content-start gap-4 md:grid-cols-2 2xl:grid-cols-3">
-                {(products ?? []).map((p, i) => (
-                  <ITCard
-                    key={p.id}
-                    tone={TONES[i % TONES.length]}
-                    title={p.name}
-                    headerActions={!p.active ? <ITBadget color="gray" size="sm" label="Dado de baja" /> : undefined}
-                    actions={
-                      <>
-                        <ITButton size="sm" variant="outlined" onClick={() => navigate(`/clientes?producto=${p.id}`)}>
-                          Ver clientes
-                        </ITButton>
-                        <ITButton size="sm" variant="text" color="gray" onClick={() => void toggle(p)}>
-                          {p.active ? "Dar de baja" : "Reactivar"}
-                        </ITButton>
-                      </>
-                    }
-                  >
-                    <p className="font-mono text-xs text-axzy-slate dark:text-axzy-mist">{p.key}</p>
-                    {p.description && (
-                      <ITText muted className="mt-2 line-clamp-2 block text-sm">
-                        {p.description}
-                      </ITText>
-                    )}
-                    <ITBentoPillRow className="mt-3">
-                      <ITBentoPill dot="var(--color-info)">{p.clients ?? 0} cliente(s)</ITBentoPill>
-                      <ITBentoPill dot="var(--color-warning)">{p.plans ?? 0} plan(es)</ITBentoPill>
-                    </ITBentoPillRow>
-                  </ITCard>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <ITCard title="Nuevo producto" tone="ternary" className="self-start">
-            <form onSubmit={create} className="flex flex-col gap-4" noValidate>
-              <ITInput
-                name="name"
-                label="Nombre"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value, key: keyTouched ? form.key : keyFrom(e.target.value) })}
-                required
-              />
-              <div>
-                <ITInput
-                  name="key"
-                  label="Clave"
-                  value={form.key}
-                  onChange={(e) => {
-                    setKeyTouched(true);
-                    setForm({ ...form, key: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "") });
-                  }}
-                  required
-                  className="font-mono"
-                />
-                <ITText muted className="mt-1 block text-xs">La usan las apps; no se cambia después.</ITText>
-              </div>
-              <ITInput
-                name="description"
-                type="textarea"
-                rows={3}
-                label="Descripción"
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-              />
-              <ITButton
-                type="submit"
-                icon={<LuPlus size={14} />}
-                disabled={busy || form.name.trim().length < 2 || form.key.length < 2}
-              >
-                {busy ? "Guardando…" : "Agregar producto"}
-              </ITButton>
-            </form>
-          </ITCard>
-        </div>
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <StatCard label="Productos" value={<CountUp value={stats.total} />} hint="en catálogo" icon={<LuBoxes size={16} />} tone="teal" />
+        <StatCard label="Activos" value={<CountUp value={stats.active} />} hint="a la venta" icon={<LuLayers size={16} />} tone="green" />
+        <StatCard label="Clientes" value={<CountUp value={stats.clients} />} hint="en todos los productos" icon={<LuUsers size={16} />} tone="amber" />
+        <StatCard label="Planes" value={<CountUp value={stats.plans} />} hint="en todos los productos" icon={<LuTags size={16} />} tone="violet" />
       </div>
-    </ITPage>
+
+      {products && products.length === 0 ? (
+        <Card bodyClassName="p-5">
+          <Empty
+            title="Todavía no hay productos"
+            description="Da de alta el primero para poder venderlo y crearle planes."
+            action={<ITButton onClick={openCreate}>Nuevo producto</ITButton>}
+          />
+        </Card>
+      ) : (
+        <div className="axc-stagger grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
+          {(products ?? []).map((p, i) => (
+            <Card key={p.id} bodyClassName="p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${TONE[i % TONE.length]}`}>
+                    <LuBoxes size={21} />
+                  </span>
+                  <div className="min-w-0">
+                    <h2 className="truncate text-[17px] font-semibold tracking-tight text-slate-900 dark:text-white">{p.name}</h2>
+                    <p className="font-mono text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">{p.key}</p>
+                  </div>
+                </div>
+                {p.active ? <ITBadget color="success" label="Activo" size="sm" /> : <ITBadget color="gray" label="Dado de baja" size="sm" />}
+              </div>
+
+              <p className="mt-3 line-clamp-2 min-h-[36px] text-[13.5px] leading-relaxed text-slate-500 dark:text-slate-400">
+                {p.description || "Sin descripción."}
+              </p>
+
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => navigate(`/clientes?producto=${p.id}`)}
+                  className="rounded-xl border border-slate-200 px-3 py-2 text-left transition hover:border-sky-300 hover:bg-sky-50/50 dark:border-slate-700 dark:hover:border-sky-800 dark:hover:bg-sky-950/20"
+                >
+                  <span className="block text-xl font-bold tabular-nums text-slate-900 dark:text-white">{p.clients ?? 0}</span>
+                  <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">clientes</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/planes?producto=${p.id}`)}
+                  className="rounded-xl border border-slate-200 px-3 py-2 text-left transition hover:border-sky-300 hover:bg-sky-50/50 dark:border-slate-700 dark:hover:border-sky-800 dark:hover:bg-sky-950/20"
+                >
+                  <span className="block text-xl font-bold tabular-nums text-slate-900 dark:text-white">{p.plans ?? 0}</span>
+                  <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">planes</span>
+                </button>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+                <div className="flex flex-wrap gap-1.5">
+                  <ITButton size="sm" variant="outlined" onClick={() => navigate(`/clientes?producto=${p.id}`)}>
+                    Ver clientes
+                  </ITButton>
+                  <ITButton size="sm" variant="text" color="gray" onClick={() => navigate(`/planes?producto=${p.id}`)}>
+                    Ver planes
+                  </ITButton>
+                </div>
+                <ITButton size="sm" variant="text" color={p.active ? "gray" : "primary"} onClick={() => void toggle(p)}>
+                  {p.active ? "Dar de baja" : "Reactivar"}
+                </ITButton>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <ITDialog isOpen={creating} onClose={() => setCreating(false)} title="Nuevo producto" className="w-[min(94vw,600px)]">
+        <form onSubmit={create} className="grid gap-4 sm:grid-cols-2" noValidate>
+          <div className="sm:col-span-2">
+            <ITInput
+              name="name"
+              label="Nombre"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value, key: keyTouched ? form.key : keyFrom(e.target.value) })}
+              placeholder="App de taquerías"
+              required
+              autoFocus
+            />
+          </div>
+          <div>
+            <ITInput
+              name="key"
+              label="Clave"
+              value={form.key}
+              onChange={(e) => {
+                setKeyTouched(true);
+                setForm({ ...form, key: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "") });
+              }}
+              required
+              className="font-mono"
+              placeholder="TAQUERIA"
+            />
+            <ITText muted className="mt-1 block text-xs">La usan las apps; no se cambia después.</ITText>
+          </div>
+          <div className="flex items-end">
+            <ITInput
+              name="description"
+              type="textarea"
+              rows={3}
+              label="Descripción (opcional)"
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              className="w-full"
+            />
+          </div>
+          <div className="flex justify-end gap-2 sm:col-span-2">
+            <ITButton type="button" variant="outlined" color="gray" onClick={() => setCreating(false)}>
+              Cancelar
+            </ITButton>
+            <ITButton type="submit" disabled={busy || form.name.trim().length < 2 || form.key.length < 2}>
+              {busy ? "Guardando…" : "Crear producto"}
+            </ITButton>
+          </div>
+        </form>
+      </ITDialog>
+    </Page>
   );
 }

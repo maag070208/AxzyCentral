@@ -8,8 +8,8 @@ import { ToastProvider } from "./toast";
 
 /**
  * Paleta de marca axzydev (axzydev-brand-kit): teal como acento, navy como tinta.
- * El shell del bento usa superficies claras y el acento va en píldoras, tiles y
- * botones. Los tonos de `layout`/`table` los adapta el provider al modo oscuro.
+ * El shell usa el lenguaje plano de la consola de CheckApp/Barcelona: lienzo
+ * claro, sidebar blanco, tarjetas con borde suave y acentos en los iconos.
  */
 const brand: Partial<ITThemePalette> = {
   primary: "#387D92",
@@ -22,27 +22,27 @@ const brand: Partial<ITThemePalette> = {
   danger: "#DC2626",
   layout: {
     sidebarBg: "#ffffff",
-    sidebarText: "#1D2636",
+    sidebarText: "#334155",
     navbarBg: "#ffffff",
     navbarText: "#1D2636",
   },
   table: {
-    headerBg: "#eef3f5",
-    headerText: "#387d92",
+    headerBg: "#f8fafc",
+    headerText: "#64748b",
     rowBg: "#ffffff",
     rowText: "#1d2636",
-    rowHover: "#f1f6f8",
+    rowHover: "#f4f7f9",
   },
 };
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ITThemeProvider theme={brand} appearance="bento" density={0.9} showFab={false}>
+    <ITThemeProvider theme={brand} appearance="flat" density={1} radius={16} shadow={1} showFab={false}>
       <ToastProvider>
         <HashRouter>
           <App />
         </HashRouter>
       </ToastProvider>
     </ITThemeProvider>
-  </StrictMode>
+  </StrictMode>,
 );

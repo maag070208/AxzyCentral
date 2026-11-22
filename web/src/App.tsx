@@ -13,11 +13,11 @@ import Plans from "./pages/Plans";
 import Products from "./pages/Products";
 
 const NAV = [
-  { id: "home", path: "/", label: "Inicio", icon: <LuLayoutDashboard size={16} /> },
-  { id: "clients", path: "/clientes", label: "Clientes", icon: <LuUsers size={16} /> },
-  { id: "payments", path: "/cobros", label: "Cobros", icon: <LuReceipt size={16} /> },
-  { id: "products", path: "/productos", label: "Productos", icon: <LuBoxes size={16} /> },
-  { id: "plans", path: "/planes", label: "Planes", icon: <LuTags size={16} /> },
+  { id: "home", path: "/", label: "Inicio", icon: <LuLayoutDashboard size={18} /> },
+  { id: "clients", path: "/clientes", label: "Clientes", icon: <LuUsers size={18} /> },
+  { id: "payments", path: "/cobros", label: "Cobros", icon: <LuReceipt size={18} /> },
+  { id: "products", path: "/productos", label: "Productos", icon: <LuBoxes size={18} /> },
+  { id: "plans", path: "/planes", label: "Planes", icon: <LuTags size={18} /> },
 ];
 
 const BRAND = import.meta.env.BASE_URL;
@@ -65,6 +65,8 @@ export default function App() {
   const toggleTheme = () => setDarkModeMode(dark ? "light" : "dark");
 
   const currentSection = NAV.find((item) => (item.path === "/" ? pathname === "/" : pathname.startsWith(item.path)));
+  const isClientDetail = pathname.startsWith("/clientes/");
+  const sectionLabel = isClientDetail ? "Clientes" : currentSection?.label ?? "Inicio";
 
   const navigationItems: ITNavigationItem[] = NAV.map((item) => ({
     id: item.id,
@@ -76,18 +78,17 @@ export default function App() {
 
   return (
     <ITLayout
-      sidebarFullHeight
-      contentClassName="max-w-screen! m-0! !px-2"
+      contentClassName="max-w-none! m-0! p-0!"
       topBar={{
-        variant: "bento",
         logo: <img src={`${BRAND}brand/${dark ? "icon-white" : "icon-color"}.svg`} alt="axzydev" className="h-8 w-8" />,
         logoText: "Central",
-        // El resto de la barra flotante se queda útil: sección actual + marca.
         centerContent: (
-          <div className="flex items-center gap-2">
-            <span className="axc-eyebrow text-axzy-slate dark:text-axzy-mist">Axzy Central</span>
-            <span aria-hidden className="h-1 w-1 rounded-full bg-axzy-mist" />
-            <span className="text-sm font-semibold">{currentSection?.label ?? "Inicio"}</span>
+          <div className="hidden items-center gap-2 md:flex">
+            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+              Axzy Central
+            </span>
+            <span aria-hidden className="h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-600" />
+            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{sectionLabel}</span>
           </div>
         ),
         userMenu: {
@@ -100,18 +101,15 @@ export default function App() {
         },
       }}
       sidebar={{
-        variant: "bento",
-        // Riel colapsado por defecto: se expande al pasar el cursor y deja el
-        // mosaico con todo el ancho. La tarjeta del bento flota con `p-2`.
-        isCollapsed: true,
-        className: "p-2",
+        isCollapsed: false,
+        header: (
+          <div className="px-3 pb-3 pt-1">
+            <p className="font-mono text-[9.5px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+              Operación
+            </p>
+          </div>
+        ),
         navigationItems,
-        profile: {
-          name: me.name,
-          detail: "Administrador",
-          label: "Cambiar entre modo claro y oscuro",
-          onClick: toggleTheme,
-        },
       }}
     >
       <Routes>

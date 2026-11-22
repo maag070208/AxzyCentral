@@ -1,54 +1,88 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  ITBentoFeed,
-  ITBentoGrid,
-  ITBentoPill,
-  ITBentoPillRow,
-  ITBentoStatStrip,
-  ITBentoTile,
-  ITButton,
-  ITConfirmDialog,
-  ITEmptyState,
-  ITPage,
-  ITText,
-} from "@axzydev/axzy_ui_system";
+import { ITBadget, ITButton, ITConfirmDialog, ITSegmentedControl } from "@axzydev/axzy_ui_system";
 import {
   LuArrowRight,
+  LuArrowUpRight,
+  LuBanknote,
   LuBoxes,
+  LuChevronRight,
   LuCircleAlert,
-  LuLayoutDashboard,
+  LuCircleCheckBig,
   LuPlus,
   LuReceipt,
   LuRefreshCw,
   LuShieldAlert,
-  LuTriangleAlert,
-  LuUserCheck,
   LuUserX,
+  LuUsers,
   LuWallet,
-  LuZap,
 } from "react-icons/lu";
-import {
-  api,
-  dateText,
-  money,
-  runBilling,
-  type ClientSummary,
-  type Product,
-} from "../api";
-import { CountUp, CountUpMoney, SectionTitle, errorOf } from "../shared";
+import { api, dateText, money, planPrice, runBilling, type ClientSummary, type Product } from "../api";
+import { BillingTypeBadge, CountUp, CountUpMoney, StatusBadge, errorOf } from "../shared";
+import QuickPayDialog from "../components/QuickPayDialog";
+import { Card, Empty, IconAction, Initials, Page, SectionTitle, StatCard, TableWrap, Td, Th } from "../ui";
 import { useNotify } from "../toast";
 
-const TONES = ["mint", "lavender", "sun", "plain"] as const;
+type ClientFilter = "all" | "active" | "overdue";
 
-/** Entrada del hilo de actividad (forma que espera `ITBentoFeed`). */
-type FeedItem = {
-  id: string;
-  icon?: React.ReactNode;
-  title: string;
-  meta?: string;
-  tone?: "success" | "violet" | "neutral";
-  href?: string;
+const FILTER_OPTIONS = [
+  { value: "all", label: "Todos" },
+  { value: "active", label: "Activos" },
+  { value: "overdue", label: "Vencidos" },
+];
+
+/** Días de calendario entre hoy y una fecha `AAAA-MM-DD` local. */
+const daysUntil = (iso: string) => {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const due = new Date(`${iso}T00:00:00`);
+  return Math.round((due.getTime() - start.getTime()) / 86_400_000);
+};
+
+const dueHint = (iso: string) => {
+  const days = daysUntil(iso);
+  if (days < 0) return `Vencido hace ${Math.abs(days)} d`;
+  if (days === 0) return "Vence hoy";
+  if (days === 1) return "Vence mañana";
+  return `Vence en ${days} días`;
+};
+
+/** Bloque de fecha compacto para la lista de próximos vencimientos. */
+function DueDateBlock({ iso }: { iso: string }) {
+  const date = new Date(`${iso}T12:00:00`);
+  return (
+    <span className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-xl border border-slate-200 bg-slate-50 leading-none dark:border-slate-700 dark:bg-slate-800/70">
+      <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">
+        {date.toLocaleDateString("es-MX", { month: "short" })}
+      </span>
+      <span className="mt-1 text-[13px] font-bold text-slate-900 dark:text-white">{date.getDate()}</span>
+    </span>
+  );
+}
+
+/** Acciones de una fila de la tabla de clientes (Cobrar / Abrir). */
+function ClientRowActions({ client, onPay }: { client: ClientSummary; onPay: (client: ClientSummary) => void }) {
+  const navigate = useNavigate();
+  return (
+    <div className="flex items-center justify-end gap-1.5" onClick={(event) => event.stopPropagation()}>
+      <IconAction label={`Cobrar ${client.name}`} tone="success" onClick={() => onPay(client)}>
+        <LuBanknote size={14} />
+      </IconAction>
+      <IconAction label={`Abrir ${client.name}`} onClick={() => navigate(`/clientes/${client.id}`)}>
+        <LuArrowUpRight size={14} />
+      </IconAction>
+    </div>
+  );
+}
+
+type AttentionGroup = {
+  key: string;
+  label: string;
+  href: string;
+  clients: ClientSummary[];
+  badge: "danger" | "warning" | "gray";
+  iconClassName: string;
+  icon: ReactNode;
 };
 
 export default function Home() {
@@ -59,6 +93,8 @@ export default function Home() {
   const [error, setError] = useState("");
   const [runs, setRuns] = useState(false);
   const [confirmRun, setConfirmRun] = useState(false);
+  const [payClient, setPayClient] = useState<ClientSummary | null>(null);
+  const [filter, setFilter] = useState<ClientFilter>("all");
 
   const load = () => {
     setError("");
@@ -74,70 +110,86 @@ export default function Home() {
   const stats = useMemo(() => {
     const rows = clients ?? [];
     const active = rows.filter((c) => c.status === "ACTIVE");
-    const withPlan = active.filter((c) => c.plan);
-    const recurring = withPlan.filter((c) => c.plan?.billingType === "RECURRING");
-    const oneTimeActive = withPlan.filter((c) => c.plan?.billingType === "ONE_TIME").length;
+    const overdue = rows.filter((c) => c.overdue);
+    const recurring = active.filter((c) => c.plan?.billingType === "RECURRING");
     return {
       rows,
       active,
-      suspended: rows.length - active.length,
-      overdue: rows.filter((c) => c.overdue),
+      suspended: rows.filter((c) => c.status === "SUSPENDED"),
+      overdue,
       mrr: recurring.reduce((sum, c) => sum + Number(c.plan?.price ?? 0), 0),
       recurringClients: recurring.length,
-      oneTimeActive,
-      planned: withPlan.length,
+      attention: rows.filter((c) => c.overdue || c.status === "SUSPENDED" || c.devices.active === 0).length,
     };
   }, [clients]);
 
-  const attention = useMemo(
-    () => stats.rows.filter((c) => c.overdue || c.status === "SUSPENDED" || c.devices.active === 0),
-    [stats.rows]
-  );
+  /** Filtro rápido de la tarjeta: máximo 6 filas, primero lo urgente. */
+  const visibleClients = useMemo(() => {
+    const base = filter === "all" ? stats.rows : filter === "active" ? stats.active : stats.overdue;
+    const rank = (client: ClientSummary) => (client.overdue ? 0 : client.status === "SUSPENDED" ? 1 : 2);
+    return [...base]
+      .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, "es"))
+      .slice(0, 6);
+  }, [filter, stats]);
 
-  const feedGroups = useMemo(() => {
-    const groups: { key: string; label: string; items: FeedItem[] }[] = [];
-    const push = (key: string, label: string, items: ClientSummary[], tone: FeedItem["tone"], icon: React.ReactNode) => {
-      if (items.length === 0) return;
-      groups.push({
-        key,
-        label,
-        items: items.map((c) => ({
-          id: c.id,
-          icon,
-          title: c.name,
-          meta: `${c.product.name} · ${c.plan?.name ?? "sin plan"}`,
-          tone,
-          href: `/clientes/${c.id}`,
-        })),
-      });
-    };
-    push("overdue", "Pagos vencidos", stats.overdue, "neutral", <LuCircleAlert size={13} />);
-    push(
-      "licenses",
-      "Licencias sin activar",
-      stats.rows.filter((c) => c.status === "ACTIVE" && c.devices.active === 0 && !c.overdue),
-      "violet",
-      <LuShieldAlert size={13} />
-    );
-    push(
-      "suspended",
-      "Cuentas suspendidas",
-      stats.rows.filter((c) => c.status === "SUSPENDED" && !c.overdue),
-      "neutral",
-      <LuUserX size={13} />
-    );
-    return groups;
+  const attentionGroups = useMemo<AttentionGroup[]>(() => {
+    const groups: AttentionGroup[] = [
+      {
+        key: "overdue",
+        label: "Pagos vencidos",
+        href: "/cobros",
+        clients: stats.overdue,
+        badge: "danger",
+        iconClassName: "text-rose-500 dark:text-rose-400",
+        icon: <LuCircleAlert size={13} />,
+      },
+      {
+        key: "licenses",
+        label: "Licencias sin activar",
+        href: "/clientes",
+        clients: stats.rows.filter((c) => c.status === "ACTIVE" && !c.overdue && c.devices.active === 0),
+        badge: "warning",
+        iconClassName: "text-amber-500 dark:text-amber-400",
+        icon: <LuShieldAlert size={13} />,
+      },
+      {
+        key: "suspended",
+        label: "Cuentas suspendidas",
+        href: "/clientes",
+        clients: stats.rows.filter((c) => c.status === "SUSPENDED" && !c.overdue),
+        badge: "gray",
+        iconClassName: "text-slate-400 dark:text-slate-500",
+        icon: <LuUserX size={13} />,
+      },
+    ];
+    return groups.filter((group) => group.clients.length > 0);
   }, [stats]);
 
-  const activeProducts = products.filter((p) => p.active);
-  const productCols = activeProducts.length <= 1 ? 12 : activeProducts.length === 2 ? 6 : 4;
+  const upcoming = useMemo(() => {
+    const rows: { client: ClientSummary; due: string }[] = [];
+    for (const client of stats.rows) {
+      if (client.nextDueDate) rows.push({ client, due: client.nextDueDate });
+    }
+    return rows.sort((a, b) => a.due.localeCompare(b.due)).slice(0, 5);
+  }, [stats]);
 
-  const nextDue = useMemo(() => {
-    const withDue = stats.rows
-      .filter((c) => c.nextDueDate)
-      .sort((a, b) => (a.nextDueDate ?? "").localeCompare(b.nextDueDate ?? ""));
-    return withDue[0] ?? null;
-  }, [stats.rows]);
+  const productStats = useMemo(
+    () =>
+      products
+        .map((product) => {
+          const rows = stats.rows.filter((c) => c.product.id === product.id);
+          const active = rows.filter((c) => c.status === "ACTIVE");
+          const monthly = active.reduce(
+            (sum, c) => sum + (c.plan?.billingType === "RECURRING" ? Number(c.plan.price) : 0),
+            0
+          );
+          return { product, total: rows.length, active: active.length, monthly };
+        })
+        .sort((a, b) => Number(b.product.active) - Number(a.product.active) || b.total - a.total),
+    [products, stats]
+  );
+
+  const attentionGroupsEmpty = attentionGroups.length === 0;
 
   const generateDebts = async () => {
     setConfirmRun(false);
@@ -158,183 +210,306 @@ export default function Home() {
     }
   };
 
-  const stripItems = [
-    {
-      id: "active",
-      label: "Clientes activos",
-      value: <CountUp value={stats.active.length} />,
-      caption: `de ${stats.rows.length}`,
-      color: "var(--color-success)",
-      tone: "mint" as const,
-    },
-    {
-      id: "suspended",
-      label: "Suspendidos",
-      value: <CountUp value={stats.suspended} />,
-      caption: "apps bloqueadas",
-      color: "var(--color-danger)",
-      tone: "lavender" as const,
-    },
-    {
-      id: "overdue",
-      label: "Con pago vencido",
-      value: <CountUp value={stats.overdue.length} />,
-      caption: "por cobrar",
-      color: "var(--color-warning)",
-      tone: "sun" as const,
-    },
-    {
-      id: "mrr",
-      label: "Ingreso mensual",
-      value: <CountUpMoney value={stats.mrr} />,
-      caption: "MRR",
-      color: "var(--color-primary)",
-      tone: "sea" as const,
-    },
-  ];
-
   return (
-    <ITPage
+    <Page
+      eyebrow="Consola"
       title="Inicio"
       description="Cómo van tus clientes, tus cobros y tus licencias."
-      icon={<LuLayoutDashboard size={20} />}
       loading={clients === null && !error}
-      error={error || undefined}
+      error={error || null}
       onRetry={load}
       actions={
-        <div className="hidden flex-wrap items-center gap-2 sm:flex">
+        <>
           <ITButton
             variant="outlined"
             icon={runs ? <LuRefreshCw size={14} className="animate-spin" /> : <LuReceipt size={14} />}
             onClick={() => setConfirmRun(true)}
-            disabled={runs || !clients?.length}
+            disabled={runs || stats.rows.length === 0}
           >
             {runs ? "Generando…" : "Generar cobros del mes"}
           </ITButton>
           <ITButton icon={<LuPlus size={14} />} onClick={() => navigate("/clientes?nuevo=1")}>
             Nuevo cliente
           </ITButton>
-        </div>
+        </>
       }
     >
-      {clients && clients.length === 0 ? (
-        <ITEmptyState
+      {stats.rows.length === 0 ? (
+        <Empty
           title="Todavía no tienes clientes"
-          description="Da de alta el primero y asígnale un producto y un plan."
-          action={<ITButton onClick={() => navigate("/clientes?nuevo=1")}>Dar de alta un cliente</ITButton>}
+          description="Da de alta el primero, asígnale un producto y un plan recurrente."
+          action={
+            <ITButton icon={<LuPlus size={14} />} onClick={() => navigate("/clientes?nuevo=1")}>
+              Dar de alta un cliente
+            </ITButton>
+          }
         />
       ) : (
-        <div className="flex flex-col gap-7">
-          <ITBentoStatStrip
-            items={stripItems}
-            onSelect={(id) => {
-              if (id === "mrr") navigate("/planes");
-              else if (id === "overdue") navigate("/cobros");
-              else navigate("/clientes");
-            }}
-          />
-
-          <section aria-labelledby="por-producto">
-            <SectionTitle
-              id="por-producto"
-              eyebrow="01 — Por producto"
-              title="Productos"
-              description="Clientes activos y monto mensual de cada producto."
-              action={
-                activeProducts.length > 0 && (
-                  <ITButton size="sm" variant="text" color="gray" onClick={() => navigate("/productos")}>
-                    <span className="inline-flex items-center gap-1">
-                      Ver productos <LuArrowRight size={13} />
-                    </span>
-                  </ITButton>
-                )
-              }
+        <div className="flex flex-col gap-4 lg:gap-5">
+          {/* KPIs de la operación */}
+          <div className="axc-stagger grid grid-cols-2 gap-3 xl:grid-cols-4">
+            <StatCard
+              label="Clientes activos"
+              value={<CountUp value={stats.active.length} />}
+              hint={`de ${stats.rows.length} en total`}
+              icon={<LuUsers size={16} />}
+              tone="green"
+              onClick={() => navigate("/clientes")}
             />
-            {activeProducts.length === 0 ? (
-              <ITEmptyState
-                icon={<LuBoxes size={28} />}
-                title="Sin productos activos"
-                description="Da de alta un producto para poder venderlo."
-                action={<ITButton onClick={() => navigate("/productos")}>Ir a productos</ITButton>}
-              />
-            ) : (
-              <ITBentoGrid className="axc-stagger">
-                {activeProducts.map((p, i) => {
-                  const rows = stats.rows.filter((c) => c.product.id === p.id);
-                  const active = rows.filter((c) => c.status === "ACTIVE");
-                  const monthly = active.reduce(
-                    (sum, c) => sum + (c.plan?.billingType === "RECURRING" ? Number(c.plan.price) : 0),
-                    0
-                  );
-                  const tileTone = TONES[i % TONES.length];
-                  return (
-                    <ITBentoTile
-                      key={p.id}
-                      cols={productCols}
-                      rows={2}
-                      tone={tileTone}
-                      icon={<LuBoxes size={15} />}
-                      label={p.name}
-                      value={<CountUp value={active.length} />}
-                      caption={`de ${rows.length} · ${money(monthly)}/mes`}
-                      onClick={() => navigate(`/clientes?producto=${p.id}`)}
-                    >
-                      <ITBentoPillRow className="mt-2">
-                        <ITBentoPill>{p.key}</ITBentoPill>
-                        <ITBentoPill dot="var(--color-success)">
-                          {rows.length - active.length} suspendido{rows.length - active.length === 1 ? "" : "s"}
-                        </ITBentoPill>
-                      </ITBentoPillRow>
-                    </ITBentoTile>
-                  );
-                })}
-              </ITBentoGrid>
-            )}
-          </section>
-
-          <section aria-labelledby="requieren-atencion">
-            <SectionTitle
-              id="requieren-atencion"
-              eyebrow="02 — Pendientes"
-              title="Requieren atención"
-              description="Pagos vencidos, licencias sin activar y cuentas suspendidas."
+            <StatCard
+              label="Suspendidos"
+              value={<CountUp value={stats.suspended.length} />}
+              hint={stats.suspended.length === 0 ? "ninguna app bloqueada" : "apps bloqueadas"}
+              icon={<LuUserX size={16} />}
+              tone="red"
+              onClick={() => navigate("/clientes")}
             />
-            <ITBentoGrid className="axc-stagger">
-              <ITBentoTile
-                cols={8}
-                rows={3}
-                icon={<LuTriangleAlert size={15} />}
-                label="Clientes con algo pendiente"
-                value={<CountUp value={attention.length} />}
-                caption={attention.length === 0 ? "todo en orden" : "por revisar"}
+            <StatCard
+              label="Con pago vencido"
+              value={<CountUp value={stats.overdue.length} />}
+              hint={stats.overdue.length === 0 ? "todo al día" : "cobros por revisar"}
+              icon={<LuCircleAlert size={16} />}
+              tone="amber"
+              onClick={() => navigate("/cobros")}
+            />
+            <StatCard
+              label="Ingreso mensual"
+              value={<CountUpMoney value={stats.mrr} />}
+              hint={`${stats.recurringClients} ${stats.recurringClients === 1 ? "plan recurrente" : "planes recurrentes"}`}
+              icon={<LuWallet size={16} />}
+              tone="teal"
+              onClick={() => navigate("/planes")}
+            />
+          </div>
+
+          {/* Tabla de clientes + panel de pendientes */}
+          <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] xl:gap-5">
+            <Card
+              title="Clientes"
+              subtitle={`${stats.active.length} activos · ${stats.overdue.length} con pago vencido`}
+              actions={<ITSegmentedControl options={FILTER_OPTIONS} value={filter} onChange={(value) => setFilter(value as ClientFilter)} size="sm" />}
+              bodyClassName="p-0"
+            >
+              {visibleClients.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
+                  <p className="text-[13.5px] font-semibold text-slate-900 dark:text-white">Sin clientes en este filtro</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Prueba con otro estado o revisa la lista completa.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setFilter("all")}
+                    className="mt-1 text-xs font-semibold text-sky-700 transition hover:text-sky-900 dark:text-sky-300 dark:hover:text-sky-200"
+                  >
+                    Ver todos
+                  </button>
+                </div>
+              ) : (
+                <>
+                <div className="hidden lg:block">
+                <TableWrap className="min-w-[640px]">
+                  <thead>
+                    <tr className="border-b border-slate-100 dark:border-slate-800">
+                      <Th className="pl-4 sm:pl-5">Cliente</Th>
+                      <Th>Plan</Th>
+                      <Th>Próximo pago</Th>
+                      <Th>Estado</Th>
+                      <Th className="pr-4 text-right sm:pr-5">Acciones</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleClients.map((client) => (
+                      <tr
+                        key={client.id}
+                        onClick={() => navigate(`/clientes/${client.id}`)}
+                        className="cursor-pointer border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-50/80 dark:border-slate-800 dark:hover:bg-slate-800/40"
+                      >
+                        <Td className="pl-4 sm:pl-5">
+                          <div className="flex items-center gap-2.5">
+                            <Initials name={client.name} size="sm" />
+                            <div className="min-w-0">
+                              <p className="truncate text-[13.5px] font-semibold text-slate-900 dark:text-white">{client.name}</p>
+                              <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                                {client.product.name}
+                                {client.contactName ? ` · ${client.contactName}` : ""}
+                              </p>
+                            </div>
+                          </div>
+                        </Td>
+                        <Td>
+                          {client.plan ? (
+                            <>
+                              <p className="font-medium text-slate-800 dark:text-slate-100">{client.plan.name}</p>
+                              <span className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                                {planPrice(client.plan)}
+                                <BillingTypeBadge type={client.plan.billingType} />
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-xs font-medium text-slate-400 dark:text-slate-500">Sin plan</span>
+                          )}
+                        </Td>
+                        <Td>
+                          {client.nextDueDate ? (
+                            <>
+                              <span
+                                className={
+                                  client.overdue
+                                    ? "font-semibold text-rose-600 dark:text-rose-400"
+                                    : "text-slate-700 dark:text-slate-200"
+                                }
+                              >
+                                {dateText(client.nextDueDate)}
+                              </span>
+                              {client.overdue && (
+                                <span className="block text-[11px] font-medium text-rose-500 dark:text-rose-400">Vencido</span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-slate-400 dark:text-slate-500">—</span>
+                          )}
+                        </Td>
+                        <Td>
+                          <StatusBadge status={client.status} />
+                        </Td>
+                        <Td className="pr-4 sm:pr-5">
+                          <div className="flex justify-end">
+                            <ClientRowActions client={client} onPay={setPayClient} />
+                          </div>
+                        </Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </TableWrap>
+                </div>
+
+                {/* Móvil: mismas filas en tarjetas */}
+                <div className="divide-y divide-slate-100 lg:hidden dark:divide-slate-800">
+                  {visibleClients.map((client) => (
+                    <div key={client.id} className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <Initials name={client.name} />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{client.name}</p>
+                          <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                            {client.product.name}
+                            {client.plan ? ` · ${client.plan.name}` : ""}
+                          </p>
+                        </div>
+                        <StatusBadge status={client.status} />
+                      </div>
+                      <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 pl-[46px]">
+                        <p
+                          className={`text-xs ${
+                            client.overdue
+                              ? "font-semibold text-rose-600 dark:text-rose-400"
+                              : "text-slate-500 dark:text-slate-400"
+                          }`}
+                        >
+                          {client.nextDueDate ? `Próximo pago ${dateText(client.nextDueDate)}` : "Sin próximo pago"}
+                        </p>
+                        <ClientRowActions client={client} onPay={setPayClient} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                </>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-3 sm:px-5 dark:border-slate-800">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {visibleClients.length} de {stats.rows.length} cliente(s)
+                </p>
+                <button
+                  type="button"
+                  onClick={() => navigate("/clientes")}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-sky-700 transition hover:text-sky-900 dark:text-sky-300 dark:hover:text-sky-200"
+                >
+                  Ver todos los clientes <LuArrowRight size={13} />
+                </button>
+              </div>
+            </Card>
+
+            <div className="flex min-w-0 flex-col gap-4">
+              {/* Pendientes en tres grupos */}
+              <Card
+                title="Requieren atención"
+                subtitle={
+                  attentionGroupsEmpty
+                    ? "Todo en orden"
+                    : `${stats.attention} ${stats.attention === 1 ? "cliente por revisar" : "clientes por revisar"}`
+                }
+                bodyClassName="p-2 sm:p-2.5"
               >
-                <div className="mt-2 min-h-0 flex-1">
-                  {feedGroups.length === 0 ? (
-                    <div className="flex h-full min-h-24 flex-col items-center justify-center gap-1 rounded-2xl bg-[color-mix(in_srgb,currentColor_5%,transparent)] p-4 text-center">
-                      <LuUserCheck size={22} className="text-[color:var(--color-success)]" aria-hidden />
-                      <p className="text-sm font-semibold">Todo en orden</p>
-                      <p className="text-xs" style={{ color: "var(--it-bento-muted)" }}>
-                        Sin pagos vencidos ni licencias sin activar.
+                {attentionGroupsEmpty ? (
+                  <div className="flex items-start gap-2.5 rounded-xl border border-dashed border-slate-200 px-3 py-4 dark:border-slate-700">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
+                      <LuCircleCheckBig size={16} />
+                    </span>
+                    <div>
+                      <p className="text-[13.5px] font-semibold text-slate-900 dark:text-white">Todo en orden</p>
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                        Sin pagos vencidos, licencias sin activar ni cuentas suspendidas.
                       </p>
                     </div>
-                  ) : (
-                    <ITBentoFeed
-                      groups={feedGroups}
-                      maxHeight={224}
-                      onItemClick={(item) => navigate(item.href ?? `/clientes/${item.id}`)}
-                    />
-                  )}
-                </div>
-              </ITBentoTile>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    {attentionGroups.map((group) => {
+                      const shown = group.clients.slice(0, 3);
+                      const rest = group.clients.length - shown.length;
+                      return (
+                        <div key={group.key} className="min-w-0">
+                          <button
+                            type="button"
+                            onClick={() => navigate(group.href)}
+                            className="flex w-full items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                          >
+                            <span className={`shrink-0 ${group.iconClassName}`}>{group.icon}</span>
+                            <span className="min-w-0 flex-1 truncate font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+                              {group.label}
+                            </span>
+                            <ITBadget color={group.badge} label={String(group.clients.length)} size="sm" variant="outlined" />
+                          </button>
+                          {shown.map((client) => (
+                            <button
+                              key={client.id}
+                              type="button"
+                              onClick={() => navigate(`/clientes/${client.id}`)}
+                              className="flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                            >
+                              <Initials name={client.name} size="sm" />
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-[13px] font-medium text-slate-900 dark:text-white">
+                                  {client.name}
+                                </span>
+                                <span className="block truncate text-[11.5px] text-slate-500 dark:text-slate-400">
+                                  {client.product.name} · {client.plan?.name ?? "Sin plan"}
+                                </span>
+                              </span>
+                              <LuChevronRight size={14} className="shrink-0 text-slate-300 dark:text-slate-600" />
+                            </button>
+                          ))}
+                          {rest > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => navigate(group.href)}
+                              className="px-1.5 py-1 text-[11.5px] font-medium text-sky-700 transition hover:text-sky-900 dark:text-sky-300 dark:hover:text-sky-200"
+                            >
+                              y {rest} más
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </Card>
 
-              <ITBentoTile cols={4} rows={3} icon={<LuZap size={15} />} label="Acciones rápidas">
-                <div className="mt-3 flex flex-1 flex-col gap-2">
-                  <ITButton
-                    variant="outlined"
-                    icon={<LuPlus size={14} />}
-                    onClick={() => navigate("/clientes?nuevo=1")}
-                    className="w-full justify-start"
-                  >
+              {/* Atajos de operación */}
+              <Card title="Acciones rápidas" bodyClassName="p-3 sm:p-4">
+                <div className="flex flex-col gap-2">
+                  <ITButton icon={<LuPlus size={14} />} onClick={() => navigate("/clientes?nuevo=1")} className="w-full justify-start">
                     Nuevo cliente
                   </ITButton>
                   <ITButton
@@ -355,49 +530,135 @@ export default function Home() {
                   >
                     Revisar cobros
                   </ITButton>
-                  <ITText muted className="mt-auto text-xs">
-                    {stats.oneTimeActive > 0
-                      ? `${stats.oneTimeActive} cliente(s) con plan de pago único: ya tienen su cargo inicial.`
-                      : "Los cobros del mes se generan solo para planes recurrentes sin pago pendiente."}
-                  </ITText>
+                  <p className="mt-1 text-[11.5px] leading-relaxed text-slate-500 dark:text-slate-400">
+                    Los cobros del mes se generan solo para clientes activos con plan recurrente y sin cobro pendiente.
+                  </p>
                 </div>
-              </ITBentoTile>
-            </ITBentoGrid>
-          </section>
+              </Card>
 
-          <section aria-label="Resumen de cartera">
-            <ITBentoGrid className="axc-stagger">
-              <ITBentoTile
-                cols={4}
-                rows={2}
-                tone="plain"
-                icon={<LuUserCheck size={15} />}
-                label="Clientes con plan"
-                value={<CountUp value={stats.planned} />}
-                caption={stats.active.length > 0 ? `${Math.round((stats.planned / stats.active.length) * 100)}% de los activos` : "sin activos"}
+              {/* Próximos cobros por fecha */}
+              <Card
+                title="Próximos vencimientos"
+                subtitle={upcoming.length > 0 ? "Los cobros más cercanos de tu cartera" : undefined}
+                bodyClassName="p-0"
+                actions={
+                  <ITButton size="sm" variant="text" color="gray" onClick={() => navigate("/cobros")}>
+                    <span className="inline-flex items-center gap-1">
+                      Ver cobros <LuArrowRight size={13} />
+                    </span>
+                  </ITButton>
+                }
+              >
+                {upcoming.length === 0 ? (
+                  <div className="px-4 py-5 text-center sm:px-5">
+                    <p className="text-[13px] font-medium text-slate-700 dark:text-slate-200">Sin vencimientos próximos</p>
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                      Todos tus clientes están al día.
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {upcoming.map(({ client, due }) => (
+                      <li key={client.id}>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/clientes/${client.id}`)}
+                          className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/40 sm:px-5"
+                        >
+                          <DueDateBlock iso={due} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[13.5px] font-semibold text-slate-900 dark:text-white">
+                              {client.name}
+                            </span>
+                            <span
+                              className={`block truncate text-xs ${
+                                daysUntil(due) < 0
+                                  ? "font-medium text-rose-600 dark:text-rose-400"
+                                  : "text-slate-500 dark:text-slate-400"
+                              }`}
+                            >
+                              {dueHint(due)} · {client.product.name}
+                            </span>
+                          </span>
+                          <LuChevronRight size={15} className="shrink-0 text-slate-300 dark:text-slate-600" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
+            </div>
+          </div>
+
+          {/* Resumen por producto a todo lo ancho */}
+          <section aria-label="Resumen por producto" className="flex flex-col gap-3">
+            <SectionTitle
+              eyebrow="Portafolio"
+              title="Por producto"
+              description="Clientes activos y monto recurrente de cada producto."
+              action={
+                <ITButton size="sm" variant="text" color="gray" onClick={() => navigate("/productos")}>
+                  <span className="inline-flex items-center gap-1">
+                    Ver productos <LuArrowRight size={13} />
+                  </span>
+                </ITButton>
+              }
+            />
+            {productStats.length === 0 ? (
+              <Empty
+                title="Sin productos"
+                description="Da de alta un producto para poder venderlo."
+                action={<ITButton onClick={() => navigate("/productos")}>Ir a productos</ITButton>}
               />
-              <ITBentoTile
-                cols={4}
-                rows={2}
-                icon={<LuReceipt size={15} />}
-                label="Planes recurrentes"
-                value={<CountUp value={stats.recurringClients} />}
-                caption={`${money(stats.mrr)} al mes`}
-                onClick={() => navigate("/planes")}
-              />
-              <ITBentoTile
-                cols={4}
-                rows={2}
-                icon={<LuCircleAlert size={15} />}
-                label="Próximo vencimiento"
-                value={<span className="text-[22px]">{nextDue ? dateText(nextDue.nextDueDate) : "—"}</span>}
-                caption={nextDue ? nextDue.name : "Sin cobros pendientes"}
-                onClick={() => navigate("/cobros")}
-              />
-            </ITBentoGrid>
+            ) : (
+              <div className="axc-stagger grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[repeat(auto-fit,minmax(250px,1fr))]">
+                {productStats.map(({ product, total, active, monthly }) => {
+                  const pct = total > 0 ? Math.round((active / total) * 100) : 0;
+                  return (
+                    <button
+                      key={product.id}
+                      type="button"
+                      onClick={() => navigate(`/clientes?producto=${product.id}`)}
+                      className="group flex min-w-0 flex-col rounded-2xl border border-slate-200/80 bg-white p-4 text-left shadow-[0_1px_2px_rgba(16,24,40,0.03)] transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_12px_28px_-20px_rgba(16,24,40,0.4)] dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="grid h-9 w-9 place-items-center rounded-xl bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300">
+                          <LuBoxes size={16} />
+                        </span>
+                        <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-400 dark:text-slate-500">
+                          {product.key}
+                        </span>
+                      </div>
+                      <p className="mt-3 truncate text-[15px] font-semibold text-slate-900 dark:text-white">{product.name}</p>
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                        {active} de {total} clientes activos
+                      </p>
+                      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                        <div className="h-full rounded-full bg-sky-500 dark:bg-sky-400" style={{ width: `${pct}%` }} />
+                      </div>
+                      <div className="mt-3 flex items-end justify-between gap-2">
+                        <p className="text-[17px] font-bold leading-none tracking-tight text-slate-900 dark:text-white">
+                          {money(monthly)}
+                          <span className="ml-1 text-[11px] font-normal text-slate-500 dark:text-slate-400">/mes</span>
+                        </p>
+                        {!product.active && <ITBadget color="gray" label="Inactivo" size="sm" variant="outlined" />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </section>
         </div>
       )}
+
+      <QuickPayDialog
+        isOpen={payClient !== null}
+        clientId={payClient?.id ?? null}
+        clientName={payClient?.name}
+        onClose={() => setPayClient(null)}
+        onChanged={load}
+      />
 
       <ITConfirmDialog
         isOpen={confirmRun}
@@ -409,6 +670,6 @@ export default function Home() {
         cancelLabel="Cancelar"
         variant="primary"
       />
-    </ITPage>
+    </Page>
   );
 }

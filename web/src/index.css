@@ -22,25 +22,89 @@
   --color-axzy-mist: #9aa6b8;
 }
 
-/* El lienzo del bento lo define el kit (`--it-layout-bg`: gris claro / azul noche).
-   Se pinta también en `body` para que la carga inicial y el login no destellen blanco. */
-body {
-  font-family: var(--font-sans);
-  background-color: var(--it-layout-bg, #f4f4f6);
+/* Lienzo de la consola: gris muy claro con un dejo frío, como la consola de
+   CheckApp/Barcelona. En oscuro pasa a azul noche. */
+:root[data-it-appearance="flat"] {
+  --it-layout-bg: #f4f6f8;
 }
 
+:root.dark[data-it-appearance="flat"] {
+  --it-layout-bg: #0b1220;
+}
+
+html {
+  background: var(--it-layout-bg, #f4f6f8);
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--it-layout-bg, #f4f6f8);
+  color: #1d2636;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.dark body {
+  color: #e2e8f0;
+}
+
+/* Metadatos en monoespaciada, como en las consolas de producto. */
 .axc-eyebrow {
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.14em;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
-/* Entrada del mosaico: las tarjetas suben y aparecen en cascada. */
+/* Scrollbars discretas (tablas anchas, sidebar, diálogos). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.dark * {
+  scrollbar-color: #334155 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  background-color: #cbd5e1;
+}
+
+.dark *::-webkit-scrollbar-thumb {
+  background-color: #334155;
+}
+
+/* Filas de tabla de la consola. */
+.axc-table tbody tr {
+  transition: background-color 120ms ease;
+}
+
+.axc-table tbody tr:hover {
+  background-color: #f7fafb;
+}
+
+.dark .axc-table tbody tr:hover {
+  background-color: rgb(30 41 59 / 0.55);
+}
+
+/* Entrada suave de las tarjetas al montar la pantalla. */
 @keyframes axc-rise {
   from {
     opacity: 0;
-    transform: translateY(16px) scale(0.97);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -48,18 +112,19 @@ body {
   }
 }
 
-.axc-rise,
-.axc-stagger > * {
-  animation: axc-rise 0.6s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+.axc-rise {
+  animation: axc-rise 0.4s cubic-bezier(0.2, 0.7, 0.3, 1) both;
 }
 
-.axc-stagger > *:nth-child(2) { animation-delay: 70ms; }
-.axc-stagger > *:nth-child(3) { animation-delay: 140ms; }
-.axc-stagger > *:nth-child(4) { animation-delay: 210ms; }
-.axc-stagger > *:nth-child(5) { animation-delay: 280ms; }
-.axc-stagger > *:nth-child(6) { animation-delay: 350ms; }
-.axc-stagger > *:nth-child(7) { animation-delay: 420ms; }
-.axc-stagger > *:nth-child(8) { animation-delay: 490ms; }
+.axc-stagger > * {
+  animation: axc-rise 0.4s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+.axc-stagger > *:nth-child(2) { animation-delay: 45ms; }
+.axc-stagger > *:nth-child(3) { animation-delay: 90ms; }
+.axc-stagger > *:nth-child(4) { animation-delay: 135ms; }
+.axc-stagger > *:nth-child(5) { animation-delay: 180ms; }
+.axc-stagger > *:nth-child(6) { animation-delay: 225ms; }
 
 @media (prefers-reduced-motion: reduce) {
   .axc-rise,
@@ -68,44 +133,21 @@ body {
   }
 }
 
-/* La tira bento pinta la etiqueta y la bajada con una tinta fija por tono; en
-   modo oscuro el fondo del tono también se oscurece y el texto queda ilegible.
-   Se hereda el color del bloque, que sí se adapta al tema. */
-.dark .it-bento-statstrip__item[class*="it-bento-statstrip__item--"] .it-bento-statstrip__label,
-.dark .it-bento-statstrip__item[class*="it-bento-statstrip__item--"] .it-bento-statstrip__caption {
-  color: inherit;
-  opacity: 0.82;
-}
-
-/* En móvil la tira bento pone la cifra y su bajada en la misma línea y los
-   recorta. Se deja bajar la bajada y se reduce la cifra para que quepan las dos. */
-@media (max-width: 640px) {
-  .it-bento-statstrip__row {
-    flex-wrap: wrap;
-    row-gap: 2px;
-  }
-
-  .it-bento-statstrip__value {
-    font-size: 26px;
-    letter-spacing: -0.03em;
-  }
-
-  .it-bento-statstrip__caption {
-    white-space: normal;
-  }
-}
-
-/* El provider inyecta `h1, h2, h3 { color: var(--color-heading-default) }` sin
-   capa de CSS, así que pisa el color de la etiqueta de los tiles (que el kit
-   define en su capa). Se restituye el color del tono y se conservan los títulos
-   de página/sección con la tinta del tema. */
-.it-bento-tile__label {
-  color: var(--it-bento-muted) !important;
-}
-
-/* Foco visible consistente sobre el lienzo bento (tiles y tarjetas clicables). */
-.it-bento-tile[role="button"]:focus-visible,
-.it-bento-statstrip__item:focus-visible {
+/* Foco visible consistente sobre el lienzo claro. */
+:where(button, a, [role="button"]):focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
+}
+
+/* El provider inyecta `h1, h2, h3 { color: ... }` sin capa; los formularios del
+   UI System heredan ese color. Dejamos que el color del tema mande también en
+   las etiquetas dentro de tarjetas y tablas. */
+.it-input label,
+.it-select label {
+  color: #475569;
+}
+
+.dark .it-input label,
+.dark .it-select label {
+  color: #cbd5e1;
 }

@@ -1,36 +1,31 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   ITAlert,
   ITBadget,
-  ITBentoGrid,
-  ITBentoPill,
-  ITBentoPillRow,
-  ITBentoStatStrip,
-  ITBentoTile,
   ITButton,
-  ITCard,
   ITDialog,
-  ITEmptyState,
   ITInput,
-  ITPage,
-  ITSelect,
   ITSegmentedControl,
+  ITSelect,
   ITText,
 } from "@axzydev/axzy_ui_system";
-import { LuPencil, LuPlus, LuTag, LuTags } from "react-icons/lu";
+import { LuPencil, LuPlus, LuReceipt, LuRepeat, LuTag, LuUsers } from "react-icons/lu";
 import { api, money, type BillingType, type Plan, type PlanBody, type PlanPatch, type Product } from "../api";
 import { useNotify } from "../toast";
-import { BillingTypeBadge, CountUp, SectionTitle, errorOf } from "../shared";
-
-const TONES = ["mint", "lavender", "sun", "plain"] as const;
+import { BillingTypeBadge, CountUp, errorOf } from "../shared";
+import { Card, Empty, Page, StatCard, TableWrap, Td, Th } from "../ui";
 
 const EMPTY = { productId: "", name: "", price: "", billingType: "RECURRING" as BillingType };
 
 export default function Plans() {
   const notify = useNotify();
+  const [params, setParams] = useSearchParams();
+  const productFilter = params.get("producto") ?? "";
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [error, setError] = useState("");
+  const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<Plan | null>(null);
@@ -43,11 +38,19 @@ export default function Plans() {
       .then(([pl, pr]) => {
         setPlans(pl);
         setProducts(pr);
-        setForm((f) => (f.productId ? f : { ...f, productId: pr.find((p) => p.active)?.id ?? "" }));
       })
       .catch((e) => setError(errorOf(e)));
   }, []);
   useEffect(load, [load]);
+
+  const activeProducts = products.filter((p) => p.active);
+  const productPlans = plans?.filter((p) => p.productId === form.productId) ?? [];
+  const defaultProduct = activeProducts.find((p) => p.key === "TAQUERIA")?.id ?? activeProducts[0]?.id ?? "";
+
+  const openCreate = () => {
+    setForm({ ...EMPTY, productId: productFilter || defaultProduct });
+    setCreating(true);
+  };
 
   const run = async (fn: () => Promise<unknown>, ok: string) => {
     try {
@@ -70,7 +73,10 @@ export default function Plans() {
       billingType: form.billingType,
       price: Number(form.price),
     };
-    if (await run(() => api("POST", "/plans", body), "Plan agregado")) setForm({ ...form, name: "", price: "" });
+    if (await run(() => api("POST", "/plans", body), "Plan agregado")) {
+      setCreating(false);
+      setForm({ ...EMPTY, productId: form.productId });
+    }
     setBusy(false);
   };
 
@@ -103,162 +109,198 @@ export default function Plans() {
     };
   }, [plans]);
 
-  const byProduct = products
-    .map((product) => ({ product, plans: (plans ?? []).filter((p) => p.productId === product.id) }))
-    .filter((g) => g.plans.length > 0);
+  const rows = useMemo(
+    () =>
+      (plans ?? [])
+        .filter((p) => !productFilter || p.productId === productFilter)
+        .slice()
+        .sort((a, b) => (a.productName ?? "").localeCompare(b.productName ?? "") || Number(a.price) - Number(b.price)),
+    [plans, productFilter]
+  );
 
-  const activeProducts = products.filter((p) => p.active);
+  const filteredProduct = products.find((p) => p.id === productFilter);
+  const createPriceLabel = form.billingType === "RECURRING" ? "Precio mensual (MXN)" : "Precio único (MXN)";
 
   return (
-    <ITPage
+    <Page
+      eyebrow="Catálogo"
       title="Planes"
-      description="Cada plan define qué cobras y cada cuánto: mensual recurrente o pago único."
-      icon={<LuTags size={20} />}
+      description="Cada plan pertenece a un producto y define si se cobra cada mes o una sola vez. Los cobros ya registrados no cambian al editar el plan."
+      actions={
+        <ITButton icon={<LuPlus size={15} />} onClick={openCreate} disabled={activeProducts.length === 0}>
+          Nuevo plan
+        </ITButton>
+      }
       loading={plans === null && !error}
-      error={error || undefined}
+      error={error || null}
       onRetry={load}
     >
-      <div className="flex flex-col gap-6">
-        <ITBentoStatStrip
-          items={[
-            { id: "all", label: "Planes", value: <CountUp value={stats.total} />, caption: "en catálogo", color: "var(--color-primary)", tone: "plain" },
-            { id: "recurring", label: "Recurrentes", value: <CountUp value={stats.recurring} />, caption: "cobro mensual", color: "var(--color-info)", tone: "mint" },
-            { id: "onetime", label: "Pago único", value: <CountUp value={stats.oneTime} />, caption: "cargo inicial", color: "var(--color-ternary)", tone: "lavender" },
-            { id: "clients", label: "Clientes asignados", value: <CountUp value={stats.clients} />, caption: "con plan", color: "var(--color-success)", tone: "sun" },
-          ]}
-        />
-
-        <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
-          <div className="flex flex-col gap-6">
-            {byProduct.length === 0 && plans && (
-              <ITEmptyState
-                icon={<LuTags size={32} />}
-                title="Todavía no hay planes"
-                description="Crea el primero y asígnalo a tus clientes desde su detalle."
-              />
-            )}
-            {byProduct.map(({ product, plans: list }) => {
-              const cols = list.length === 1 ? 6 : list.length === 2 ? 6 : 4;
-              return (
-                <section key={product.id} aria-labelledby={`producto-${product.id}`}>
-                  <SectionTitle
-                    id={`producto-${product.id}`}
-                    eyebrow={product.key}
-                    title={product.name}
-                    description={`${list.length} plan(es) · ${product.clients ?? 0} cliente(s)`}
-                  />
-                  <ITBentoGrid className="axc-stagger">
-                    {list.map((p, i) => (
-                      <ITBentoTile
-                        key={p.id}
-                        cols={cols}
-                        rows={2}
-                        tone={TONES[i % TONES.length]}
-                        icon={<LuTag size={15} />}
-                        label={
-                          <span className="flex flex-wrap items-center gap-2">
-                            {p.name}
-                            {!p.active && <ITBadget color="gray" size="sm" label="Dado de baja" />}
-                          </span>
-                        }
-                        value={money(p.price)}
-                        caption={p.billingType === "RECURRING" ? "por mes" : "pago único"}
-                      >
-                        <ITBentoPillRow className="mt-2">
-                          <BillingTypeBadge type={p.billingType} />
-                          <ITBentoPill>{p.clients ?? 0} cliente(s)</ITBentoPill>
-                        </ITBentoPillRow>
-                        <div className="mt-auto flex flex-wrap gap-2 pt-3">
-                          <ITButton size="sm" variant="outlined" icon={<LuPencil size={13} />} onClick={() => openEdit(p)}>
-                            Editar
-                          </ITButton>
-                          <ITButton
-                            size="sm"
-                            variant="text"
-                            color="gray"
-                            onClick={() =>
-                              void run(
-                                () => api("PATCH", `/plans/${p.id}`, { active: !p.active }),
-                                p.active ? "Plan dado de baja" : "Plan reactivado"
-                              )
-                            }
-                          >
-                            {p.active ? "Dar de baja" : "Reactivar"}
-                          </ITButton>
-                        </div>
-                      </ITBentoTile>
-                    ))}
-                  </ITBentoGrid>
-                </section>
-              );
-            })}
-          </div>
-
-          <ITCard title="Nuevo plan" tone="ternary" className="self-start">
-            <form onSubmit={create} className="flex flex-col gap-4" noValidate>
-              <ITSelect
-                name="productId"
-                label="Producto"
-                value={form.productId}
-                options={activeProducts.map((p) => ({ value: p.id, label: p.name }))}
-                onChange={(e) => setForm({ ...form, productId: e.target.value })}
-                required
-              />
-              <ITInput
-                name="name"
-                label="Nombre del plan"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="Básico"
-                required
-              />
-              <div>
-                <p className="axc-eyebrow mb-2 text-axzy-slate dark:text-axzy-mist">Tipo de cobro</p>
-                <ITSegmentedControl
-                  options={[
-                    { value: "RECURRING", label: "Recurrente" },
-                    { value: "ONE_TIME", label: "Pago único" },
-                  ]}
-                  value={form.billingType}
-                  onChange={(value) => setForm({ ...form, billingType: value as BillingType })}
-                />
-              </div>
-              <ITInput
-                name="price"
-                type="number"
-                label={form.billingType === "RECURRING" ? "Precio mensual (MXN)" : "Precio único (MXN)"}
-                value={form.price}
-                onChange={(e) => setForm({ ...form, price: e.target.value })}
-                required
-              />
-              <ITText muted className="text-xs">
-                {form.billingType === "RECURRING"
-                  ? "El precio se cobra cada mes y la Central puede generar el siguiente cobro automáticamente."
-                  : "Se cobra una sola vez, como instalación o cargo inicial del producto."}
-              </ITText>
-              <ITButton
-                type="submit"
-                icon={<LuPlus size={14} />}
-                disabled={busy || !form.productId || form.name.trim().length < 2 || form.price === ""}
-              >
-                {busy ? "Guardando…" : "Agregar plan"}
-              </ITButton>
-            </form>
-          </ITCard>
-        </div>
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <StatCard label="Planes en catálogo" value={<CountUp value={stats.total} />} hint="activos y dados de baja" icon={<LuTag size={16} />} tone="teal" />
+        <StatCard label="Recurrentes" value={<CountUp value={stats.recurring} />} hint="cobro mensual" icon={<LuRepeat size={16} />} tone="green" />
+        <StatCard label="Pago único" value={<CountUp value={stats.oneTime} />} hint="cargo inicial" icon={<LuReceipt size={16} />} tone="violet" />
+        <StatCard label="Clientes con plan" value={<CountUp value={stats.clients} />} hint="asignaciones" icon={<LuUsers size={16} />} tone="amber" />
       </div>
 
-      <ITDialog isOpen={editing !== null} onClose={() => setEditing(null)} title={`Editar ${editing?.name ?? "plan"}`}>
-        <form onSubmit={saveEdit} className="flex flex-col gap-4" noValidate>
+      <Card
+        title="Catálogo de planes"
+        subtitle={`${rows.length} plan(es) en ${products.length} producto(s)`}
+        bodyClassName="p-0"
+        actions={
+          <>
+            {filteredProduct && (
+              <ITButton
+                size="sm"
+                variant="text"
+                color="gray"
+                onClick={() => {
+                  params.delete("producto");
+                  setParams(params);
+                }}
+              >
+                Quitar filtro: {filteredProduct.name}
+              </ITButton>
+            )}
+            <ITButton size="sm" variant="outlined" icon={<LuPlus size={13} />} onClick={openCreate} disabled={activeProducts.length === 0}>
+              Nuevo plan
+            </ITButton>
+          </>
+        }
+      >
+        {plans && plans.length === 0 ? (
+          <div className="p-5">
+            <Empty
+              title="Todavía no hay planes"
+              description="Crea el primero y asígnalo a tus clientes desde su detalle."
+              action={<ITButton onClick={openCreate}>Crear plan</ITButton>}
+            />
+          </div>
+        ) : (
+          <TableWrap className="min-w-[900px]">
+            <thead className="border-b border-slate-100 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-800/40">
+              <tr>
+                <Th>Plan</Th>
+                <Th>Producto</Th>
+                <Th>Tipo de cobro</Th>
+                <Th className="text-right">Precio</Th>
+                <Th className="text-right">Clientes</Th>
+                <Th>Estado</Th>
+                <Th className="text-right">Acciones</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((p) => (
+                <tr key={p.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
+                  <Td>
+                    <span className="font-semibold text-slate-900 dark:text-white">{p.name}</span>
+                  </Td>
+                  <Td className="text-slate-500 dark:text-slate-400">{p.productName ?? "—"}</Td>
+                  <Td>
+                    <BillingTypeBadge type={p.billingType} />
+                  </Td>
+                  <Td className="text-right">
+                    <span className="text-[15px] font-bold tabular-nums text-slate-900 dark:text-white">{money(p.price)}</span>
+                    <span className="ml-1 text-xs text-slate-400">{p.billingType === "RECURRING" ? "/mes" : "único"}</span>
+                  </Td>
+                  <Td className="text-right tabular-nums">{p.clients ?? 0}</Td>
+                  <Td>{p.active ? <ITBadget color="success" label="Activo" size="sm" /> : <ITBadget color="gray" label="Dado de baja" size="sm" />}</Td>
+                  <Td>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <ITButton size="sm" variant="outlined" icon={<LuPencil size={13} />} onClick={() => openEdit(p)}>
+                        Editar
+                      </ITButton>
+                      <ITButton
+                        size="sm"
+                        variant="text"
+                        color={p.active ? "gray" : "primary"}
+                        onClick={() =>
+                          void run(
+                            () => api("PATCH", `/plans/${p.id}`, { active: !p.active }),
+                            p.active ? "Plan dado de baja" : "Plan reactivado"
+                          )
+                        }
+                      >
+                        {p.active ? "Dar de baja" : "Reactivar"}
+                      </ITButton>
+                    </div>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </TableWrap>
+        )}
+      </Card>
+
+      {/* Alta de plan */}
+      <ITDialog isOpen={creating} onClose={() => setCreating(false)} title="Nuevo plan" className="w-[min(94vw,620px)]">
+        <form onSubmit={create} className="grid gap-4 sm:grid-cols-2" noValidate>
+          <ITSelect
+            name="productId"
+            label="Producto"
+            required
+            value={form.productId}
+            options={activeProducts.map((p) => ({ value: p.id, label: p.name }))}
+            onChange={(e) => setForm({ ...form, productId: e.target.value })}
+          />
           <ITInput
-            name="editName"
-            label="Nombre"
-            value={editForm.name}
-            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+            name="name"
+            label="Nombre del plan"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            placeholder="Básico"
+            required
+            autoFocus
+          />
+          <div className="sm:col-span-2">
+            <p className="axc-eyebrow mb-2 text-slate-500 dark:text-slate-400">Tipo de cobro</p>
+            <ITSegmentedControl
+              options={[
+                { value: "RECURRING", label: "Recurrente (mensual)" },
+                { value: "ONE_TIME", label: "Pago único" },
+              ]}
+              value={form.billingType}
+              onChange={(value) => setForm({ ...form, billingType: value as BillingType })}
+            />
+          </div>
+          <ITInput
+            name="price"
+            type="number"
+            label={createPriceLabel}
+            value={form.price}
+            onChange={(e) => setForm({ ...form, price: e.target.value })}
             required
           />
+          <div className="flex items-end">
+            <ITText muted className="text-xs">
+              {form.billingType === "RECURRING"
+                ? "La Central puede generar el siguiente cobro cada mes."
+                : "Se cobra una sola vez: instalación o cargo inicial."}
+            </ITText>
+          </div>
+          {productPlans.length > 0 && (
+            <div className="sm:col-span-2">
+              <ITAlert variant="info">
+                {productPlans.length} plan(es) ya existen para este producto: {productPlans.map((p) => p.name).join(", ")}.
+              </ITAlert>
+            </div>
+          )}
+          <div className="flex justify-end gap-2 sm:col-span-2">
+            <ITButton type="button" variant="outlined" color="gray" onClick={() => setCreating(false)}>
+              Cancelar
+            </ITButton>
+            <ITButton type="submit" disabled={busy || !form.productId || form.name.trim().length < 2 || form.price === ""}>
+              {busy ? "Guardando…" : "Crear plan"}
+            </ITButton>
+          </div>
+        </form>
+      </ITDialog>
+
+      {/* Edición de plan */}
+      <ITDialog isOpen={editing !== null} onClose={() => setEditing(null)} title={`Editar ${editing?.name ?? "plan"}`} className="w-[min(94vw,560px)]">
+        <form onSubmit={saveEdit} className="flex flex-col gap-4" noValidate>
+          <ITInput name="editName" label="Nombre" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required />
           <div>
-            <p className="axc-eyebrow mb-2 text-axzy-slate dark:text-axzy-mist">Tipo de cobro</p>
+            <p className="axc-eyebrow mb-2 text-slate-500 dark:text-slate-400">Tipo de cobro</p>
             <ITSegmentedControl
               options={[
                 { value: "RECURRING", label: "Recurrente" },
@@ -276,10 +318,8 @@ export default function Plans() {
             onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
             required
           />
-          <ITAlert variant="info">
-            Cambiar el precio o el tipo de cobro no altera los cobros ya registrados; solo aplica a los siguientes.
-          </ITAlert>
-          <div className="flex flex-wrap justify-end gap-2">
+          <ITAlert variant="info">Cambiar precio o tipo de cobro no altera los cobros ya registrados.</ITAlert>
+          <div className="flex justify-end gap-2">
             <ITButton type="button" variant="outlined" color="gray" onClick={() => setEditing(null)}>
               Cancelar
             </ITButton>
@@ -289,6 +329,6 @@ export default function Plans() {
           </div>
         </form>
       </ITDialog>
-    </ITPage>
+    </Page>
   );
 }
