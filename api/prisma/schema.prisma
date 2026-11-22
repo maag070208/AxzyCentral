@@ -30,6 +30,7 @@ model Product {
   updatedAt   DateTime @updatedAt
   plans       Plan[]
   clients     Client[]
+  roles       Role[]
 
   @@map("products")
 }
@@ -79,6 +80,7 @@ model Client {
   updatedAt   DateTime     @updatedAt
   payments    Payment[]
   devices     Device[]
+  users       ClientUser[]
 
   @@index([planId])
   @@index([productId])
@@ -139,4 +141,56 @@ model Device {
 
   @@index([clientId])
   @@map("devices")
+}
+
+/// Catálogo de roles de un producto (p. ej. ADMIN, CAJERO de TAQUERIA). Se
+/// siembran en la migración; cada cliente puede dar de alta usuarios con ellos.
+model Role {
+  id          String           @id @default(uuid())
+  productId   String
+  product     Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
+  /// Clave estable que manda la consola y entiende la app (ADMIN, CAJERO, …).
+  key         String
+  name        String
+  permissions Json             @default("[]")
+  active      Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  users       ClientUserRole[]
+
+  @@unique([productId, key])
+  @@map("roles")
+}
+
+/// Usuario de un cliente (el que entra a la app con el código del dispositivo).
+/// `username` es único dentro del cliente y la contraseña es temporal hasta que
+/// la cambia desde la app.
+model ClientUser {
+  id                 String           @id @default(uuid())
+  clientId           String
+  client             Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name               String
+  username           String
+  passwordHash       String
+  active             Boolean          @default(true)
+  lastLoginAt        DateTime?
+  mustChangePassword Boolean          @default(true)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  roles              ClientUserRole[]
+
+  @@unique([clientId, username])
+  @@index([clientId])
+  @@map("client_users")
+}
+
+/// Roles asignados a un usuario (N a N). Al borrar usuario o rol desaparece.
+model ClientUserRole {
+  userId String
+  roleId String
+  user   ClientUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("client_user_roles")
 }

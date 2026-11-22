@@ -30,7 +30,12 @@ const call = async (method: string, path: string, opts: { body?: unknown; auth?:
 };
 
 before(async () => {
-  await db.$executeRawUnsafe('TRUNCATE "devices", "payments", "clients", "plans", "admins" CASCADE');
+  await db.$executeRawUnsafe(
+    'TRUNCATE "client_user_roles", "client_users", "devices", "payments", "clients", "plans", "admins" CASCADE'
+  );
+  // Los productos de otras pruebas se van con sus roles; el catálogo de
+  // TAQUERIA que siembra la migración se conserva.
+  await db.role.deleteMany({ where: { product: { is: { key: { not: "TAQUERIA" } } } } });
   await db.product.deleteMany({ where: { key: { not: "TAQUERIA" } } });
   await db.admin.create({ data: { username: "yo", name: "Yo", passwordHash: await bcrypt.hash("clave-de-prueba-123", 4) } });
   server = createApp().listen(0, "127.0.0.1");

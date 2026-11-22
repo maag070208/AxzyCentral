@@ -128,6 +128,54 @@ export interface Me {
   name: string;
 }
 
+/* ------------------------------------------------------------------ */
+/* Usuarios y roles de clientes (contrato §3)                          */
+/* ------------------------------------------------------------------ */
+
+/** Rol del catálogo de un producto (`GET /roles?productId=`). */
+export interface Role {
+  id: string;
+  key: string;
+  name: string;
+  /** Lista libre de permisos; la Central solo la muestra, no la edita. */
+  permissions: unknown[];
+  active: boolean;
+}
+
+/** Vista de un usuario de la app del cliente (`clientUserView` del contrato). */
+export interface ClientUser {
+  id: string;
+  clientId: string;
+  name: string;
+  username: string;
+  active: boolean;
+  mustChangePassword: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+  roles: Role[];
+}
+
+/** Respuesta del alta y del reset: la contraseña temporal solo viaja una vez. */
+export interface CreatedClientUser {
+  user: ClientUser;
+  temporaryPassword: string;
+}
+
+export interface NewClientUserBody {
+  name: string;
+  /** Si se omite, el API lo genera con la convención del contrato §2. */
+  username?: string;
+  /** Keys de los roles del producto del cliente (mínimo uno). */
+  roles: string[];
+}
+
+export interface ClientUserPatch {
+  name?: string;
+  username?: string;
+  roles?: string[];
+  active?: boolean;
+}
+
 export interface NewPaymentBody {
   kind: PaymentKind;
   /** Solo recurrente (`AAAA-MM`); en único se omite. */
@@ -278,6 +326,42 @@ export const rotateDeviceCode = (clientId: string, deviceId: string) =>
 
 export const setDeviceActive = (clientId: string, deviceId: string, active: boolean) =>
   api("PATCH", `/clients/${clientId}/devices/${deviceId}`, { active });
+
+/* ------------------------------------------------------------------ */
+/* Usuarios y roles del cliente (contrato §4)                          */
+/* ------------------------------------------------------------------ */
+
+/** Catálogo de roles del producto; incluye activos e inactivos, ordenados por key. */
+export const listRoles = (productId: string) => api<Role[]>("GET", `/roles${query({ productId })}`);
+
+export const listClientUsers = (clientId: string) => api<ClientUser[]>("GET", `/clients/${clientId}/users`);
+
+/** Alta con contraseña temporal; el API la devuelve una sola vez. */
+export const createClientUser = (clientId: string, body: NewClientUserBody) =>
+  api<CreatedClientUser>("POST", `/clients/${clientId}/users`, body);
+
+export const updateClientUser = (clientId: string, userId: string, patch: ClientUserPatch) =>
+  api<ClientUser>("PATCH", `/clients/${clientId}/users/${userId}`, patch);
+
+/** Genera una nueva temporal y vuelve a marcar `mustChangePassword`. */
+export const resetClientUserPassword = (clientId: string, userId: string) =>
+  api<CreatedClientUser>("POST", `/clients/${clientId}/users/${userId}/password`);
+
+/** Traduce los errores del contrato de usuarios a un texto útil para la consola. */
+export function clientUserError(e: unknown): string {
+  if (e instanceof ApiError) {
+    const map: Record<string, string> = {
+      USERNAME_TAKEN: "Ese usuario ya existe en este cliente. Prueba con otro nombre de usuario.",
+      CLIENT_NOT_FOUND: "El cliente ya no existe. Recarga la página.",
+      USER_NOT_FOUND: "El usuario ya no existe. Actualiza la lista.",
+    };
+    if (map[e.code]) return map[e.code];
+    if (e.code === "NETWORK") return e.message;
+    if (e.status === 400) return e.message || "Revisa los datos del usuario.";
+    return e.message || "No se pudo guardar el usuario.";
+  }
+  return e instanceof Error ? e.message : "No se pudo guardar el usuario.";
+}
 
 /* ------------------------------------------------------------------ */
 /* Formato compartido                                                  */

@@ -56,6 +56,7 @@ import {
   paymentError,
 } from "../shared";
 import { Card, Empty, IconAction, Initials, Page, TableWrap, Td, Th } from "../ui";
+import ClientUsersCard from "../components/ClientUsersCard";
 import QrActivationDialog from "../components/QrActivationDialog";
 import QuickPayDialog from "../components/QuickPayDialog";
 
@@ -220,6 +221,7 @@ export default function ClientDetail() {
               onAdd={() => setAddOpen(true)}
             />
             <DevicesCard client={client} run={run} onNewQr={openNewQr} onRotateQr={openDeviceQr} />
+            <ClientUsersCard client={client} />
           </div>
 
           <aside className="flex min-w-0 flex-col gap-5 xl:sticky xl:top-6">

@@ -9,8 +9,12 @@ import { activateRouter, licenseRouter } from "./routes/license";
 import { configRouter } from "./routes/config";
 import { plansRouter } from "./routes/plans";
 import { clientsRouter } from "./routes/clients";
+import { clientUsersRouter } from "./routes/client-users";
+import { rolesRouter } from "./routes/roles";
+import { appRouter } from "./routes/app";
 import { productsRouter } from "./routes/products";
 import { billingRouter, paymentsRouter } from "./routes/payments";
+import { clientSalesRouter, salesRouter } from "./routes/sales";
 
 export const createApp = () => {
   const app = express();
@@ -28,13 +32,23 @@ export const createApp = () => {
   api.use("/config", configRouter);
   api.use("/activate", activateRouter);
   api.use("/license", licenseRouter);
+  api.use("/sales", salesRouter);
   api.use("/auth", authRouter);
+  // App del cliente: `/login` es público (con rate limit); `/me` y `/password`
+  // validan su propio token de app.
+  api.use("/app", appRouter);
   // Administrativas: requieren sesión de la consola.
-  api.use("/products", requireAdmin, productsRouter);
-  api.use("/plans", requireAdmin, plansRouter);
-  api.use("/clients", requireAdmin, clientsRouter);
-  api.use("/payments", requireAdmin, paymentsRouter);
-  api.use("/billing", requireAdmin, billingRouter);
+  const admin = express.Router();
+  admin.use(requireAdmin);
+  admin.use("/products", productsRouter);
+  admin.use("/plans", plansRouter);
+  admin.use("/roles", rolesRouter);
+  admin.use("/clients", clientUsersRouter);
+  admin.use("/clients", clientsRouter);
+  admin.use("/clients", clientSalesRouter);
+  admin.use("/payments", paymentsRouter);
+  admin.use("/billing", billingRouter);
+  api.use(admin);
   app.use("/api/v1", api);
 
   app.use((_req, res) => {
