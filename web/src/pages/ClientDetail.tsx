@@ -15,6 +15,7 @@ import {
   LuCreditCard,
   LuMessageCircle,
   LuPause,
+  LuPencil,
   LuPlay,
   LuPlus,
   LuQrCode,
@@ -78,6 +79,7 @@ export default function ClientDetail() {
   const [qrOpen, setQrOpen] = useState(false);
   const [qrDevice, setQrDevice] = useState<Device | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const load = useCallback(async () => {
     setError("");
@@ -192,6 +194,9 @@ export default function ClientDetail() {
             <ITButton variant="outlined" icon={<LuQrCode size={15} />} onClick={openNewQr}>
               Generar QR
             </ITButton>
+            <ITButton variant="outlined" icon={<LuPencil size={15} />} onClick={() => setEditOpen(true)}>
+              Editar
+            </ITButton>
             <ITButton
               color={suspended ? "primary" : "danger"}
               variant={suspended ? "filled" : "outlined"}
@@ -218,44 +223,7 @@ export default function ClientDetail() {
           </div>
 
           <aside className="flex min-w-0 flex-col gap-5 xl:sticky xl:top-6">
-            <SummaryCard client={client} />
-            <InfoCard key={client.plan?.id ?? "no-plan"} client={client} plans={plans} run={run} />
-
-            <Card title="Acciones" subtitle="Atajos rápidos">
-              <div className="flex flex-col gap-2">
-                <ITButton className="w-full justify-center" icon={<LuWallet size={15} />} onClick={() => setQuickOpen(true)}>
-                  Cobrar
-                </ITButton>
-                <ITButton
-                  variant="outlined"
-                  className="w-full justify-center"
-                  icon={<LuRefreshCw size={15} />}
-                  onClick={() => void generateNext()}
-                  disabled={generating || !client.plan}
-                  title={!client.plan ? "Asigna un plan al cliente para generar cobros" : undefined}
-                >
-                  {generating ? "Generando…" : "Generar siguiente cobro"}
-                </ITButton>
-                <ITButton
-                  variant="outlined"
-                  className="w-full justify-center"
-                  icon={<LuMessageCircle size={15} />}
-                  onClick={() => void copyWhatsapp()}
-                  disabled={!client.phone}
-                  title={!client.phone ? "Agrega un teléfono al cliente para WhatsApp" : "Copia un enlace de WhatsApp con el estado de cuenta"}
-                >
-                  Copiar WhatsApp
-                </ITButton>
-                <ITButton variant="outlined" className="w-full justify-center" icon={<LuQrCode size={15} />} onClick={openNewQr}>
-                  Nuevo QR de activación
-                </ITButton>
-              </div>
-              {!client.plan && (
-                <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-                  Asigna un plan en «Datos y plan» para generar cobros automáticos. Los cobros manuales ya están disponibles.
-                </p>
-              )}
-            </Card>
+            <SummaryCard client={client} onEdit={() => setEditOpen(true)} onWhatsapp={() => void copyWhatsapp()} />
           </aside>
         </div>
       )}
@@ -281,6 +249,10 @@ export default function ClientDetail() {
       )}
 
       {client && addOpen && <NewPaymentDialog client={client} run={run} onClose={() => setAddOpen(false)} />}
+
+      {client && (
+        <EditClientDialog client={client} plans={plans} run={run} isOpen={editOpen} onClose={() => setEditOpen(false)} />
+      )}
 
       {client && (
         <ITConfirmDialog
@@ -321,7 +293,7 @@ function SummaryRow({ label, children }: { label: string; children: ReactNode })
   );
 }
 
-function SummaryCard({ client }: { client: Detail }) {
+function SummaryCard({ client, onEdit, onWhatsapp }: { client: Detail; onEdit: () => void; onWhatsapp: () => void }) {
   const pending = client.payments.filter((p) => p.status === "PENDING");
   const pendingAmount = pending.reduce((sum, p) => sum + Number(p.amount), 0);
   const activeDevices = client.devices.filter((d) => d.active).length;
@@ -329,7 +301,20 @@ function SummaryCard({ client }: { client: Detail }) {
   const label = client.overdue ? "Vencido" : pending.length > 0 ? "Pendiente" : "Al corriente";
 
   return (
-    <Card title="Resumen" subtitle="Estado, plan y cobro">
+    <Card
+      title="Resumen"
+      subtitle="Estado, plan y cobro"
+      actions={
+        <div className="flex items-center gap-1">
+          <IconAction label="Copiar enlace de WhatsApp" onClick={onWhatsapp} disabled={!client.phone}>
+            <LuMessageCircle size={14} />
+          </IconAction>
+          <IconAction label="Editar datos del cliente" onClick={onEdit}>
+            <LuPencil size={14} />
+          </IconAction>
+        </div>
+      }
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="axc-eyebrow text-slate-400 dark:text-slate-500">Saldo pendiente</p>
@@ -366,6 +351,9 @@ function SummaryCard({ client }: { client: Detail }) {
         <SummaryRow label="Licencias activas">
           {activeDevices} de {client.devices.length}
         </SummaryRow>
+        <SummaryRow label="Contacto">{client.contactName || "—"}</SummaryRow>
+        <SummaryRow label="Teléfono">{client.phone || "—"}</SummaryRow>
+        <SummaryRow label="Correo">{client.email || "—"}</SummaryRow>
         <SummaryRow label="Última conexión">{agoText(client.lastSeenAt)}</SummaryRow>
       </dl>
     </Card>
@@ -876,7 +864,19 @@ function DevicesCard({
 /* Datos y plan                                                        */
 /* ------------------------------------------------------------------ */
 
-function InfoCard({ client, plans, run }: { client: Detail; plans: Plan[]; run: Run }) {
+function EditClientDialog({
+  client,
+  plans,
+  run,
+  isOpen,
+  onClose,
+}: {
+  client: Detail;
+  plans: Plan[];
+  run: Run;
+  isOpen: boolean;
+  onClose: () => void;
+}) {
   const initial = {
     name: client.name,
     contactName: client.contactName ?? "",
@@ -892,33 +892,22 @@ function InfoCard({ client, plans, run }: { client: Detail; plans: Plan[]; run: 
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    await run(() => api("PATCH", `/clients/${client.id}`, { ...form, planId: form.planId || null }), "Cambios guardados");
+    const ok = await run(() => api("PATCH", `/clients/${client.id}`, { ...form, planId: form.planId || null }), "Cambios guardados");
+    if (ok) onClose();
   };
 
   return (
-    <Card title="Datos y plan" subtitle="Ficha del cliente">
-      <form onSubmit={submit} className="flex flex-col gap-3.5" noValidate>
-        <ITInput name="name" label="Nombre" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-        <ITInput
-          name="contactName"
-          label="Contacto"
-          value={form.contactName}
-          onChange={(e) => setForm({ ...form, contactName: e.target.value })}
-        />
-        <ITInput
-          name="phone"
-          label="Teléfono (WhatsApp)"
-          value={form.phone}
-          onChange={(e) => setForm({ ...form, phone: e.target.value })}
-        />
-        <ITInput
-          name="email"
-          type="email"
-          label="Correo"
-          value={form.email}
-          onChange={(e) => setForm({ ...form, email: e.target.value })}
-        />
-        <div>
+    <ITDialog isOpen={isOpen} onClose={onClose} title="Datos y plan" className="w-[min(94vw,660px)]">
+      <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2" noValidate>
+        <div className="sm:col-span-2">
+          <ITInput name="name" label="Nombre" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required autoFocus />
+        </div>
+        <ITInput name="contactName" label="Contacto" value={form.contactName} onChange={(e) => setForm({ ...form, contactName: e.target.value })} />
+        <ITInput name="phone" label="Teléfono (WhatsApp)" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+        <div className="sm:col-span-2">
+          <ITInput name="email" type="email" label="Correo" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+        </div>
+        <div className="sm:col-span-2">
           <ITSelect
             name="planId"
             label={`Plan de ${client.product.name}`}
@@ -944,21 +933,28 @@ function InfoCard({ client, plans, run }: { client: Detail; plans: Plan[]; run: 
             </div>
           )}
         </div>
-        <ITInput
-          name="notes"
-          type="textarea"
-          rows={2}
-          label="Notas"
-          value={form.notes}
-          onChange={(e) => setForm({ ...form, notes: e.target.value })}
-        />
-        <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+        <div className="sm:col-span-2">
+          <ITInput
+            name="notes"
+            type="textarea"
+            rows={2}
+            label="Notas"
+            value={form.notes}
+            onChange={(e) => setForm({ ...form, notes: e.target.value })}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-3 sm:col-span-2 dark:border-slate-800">
           <span className="text-xs text-slate-400 dark:text-slate-500">{dirty ? "Cambios sin guardar" : "Todo guardado"}</span>
-          <ITButton type="submit" size="sm" disabled={!dirty || form.name.trim().length < 2}>
-            Guardar cambios
-          </ITButton>
+          <div className="flex gap-2">
+            <ITButton type="button" variant="outlined" color="gray" onClick={onClose}>
+              Cancelar
+            </ITButton>
+            <ITButton type="submit" disabled={!dirty || form.name.trim().length < 2}>
+              Guardar cambios
+            </ITButton>
+          </div>
         </div>
       </form>
-    </Card>
+    </ITDialog>
   );
 }
