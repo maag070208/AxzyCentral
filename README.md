@@ -65,6 +65,15 @@ pnpm dev                            # API :4100 y consola :5100 (Vite pasa /api 
 - `PUBLIC_API_URL` es la URL pública del API que se mete en el QR (p. ej. `https://central-api.axzy.dev/api/v1`, sin `/` final). En desarrollo, si el QR se va a escanear desde un teléfono real, apunta a la IP de tu Mac (`http://192.168.x.x:4100/api/v1`); desde el emulador de Android, `http://10.0.2.2:4100/api/v1`.
 - La app Android en debug usa `http://10.0.2.2:4100/api/v1` por defecto; si el QR trae `u`, ese servidor manda.
 
+**Central local sin tocar Railway** (base propia en Docker, puerto 55433):
+
+```bash
+pnpm dev:local          # API :4100 y consola :5100; entra con dev / dev-local-12345
+pnpm dev:local --demo   # además "Taquería Demo" con un mes de ventas para ver métricas
+```
+
+Ignora el `DATABASE_URL` del `.env` (Railway). La base local vive en el volumen `axc-dev-pg` y sobrevive reinicios.
+
 Pruebas:
 
 ```bash

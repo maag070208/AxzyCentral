@@ -5,6 +5,8 @@ import {
   LuArrowRight,
   LuArrowUpRight,
   LuBanknote,
+  LuChartColumn,
+  LuClockAlert,
   LuBoxes,
   LuChevronRight,
   LuCircleAlert,
@@ -20,6 +22,8 @@ import {
 import { api, dateText, money, planPrice, runBilling, type ClientSummary, type Product } from "../api";
 import { BillingTypeBadge, CountUp, CountUpMoney, StatusBadge, errorOf } from "../shared";
 import QuickPayDialog from "../components/QuickPayDialog";
+import { BarChart, Delta } from "../components/SalesCharts";
+import { change, periodRange, pesos, salesOverview, shortDate, type SalesOverview } from "../sales";
 import { Card, Empty, IconAction, Initials, Page, SectionTitle, StatCard, TableWrap, Td, Th } from "../ui";
 import { useNotify } from "../toast";
 
@@ -95,6 +99,8 @@ export default function Home() {
   const [confirmRun, setConfirmRun] = useState(false);
   const [payClient, setPayClient] = useState<ClientSummary | null>(null);
   const [filter, setFilter] = useState<ClientFilter>("all");
+  const [sales, setSales] = useState<SalesOverview | null>(null);
+  const range = useMemo(() => periodRange("30d"), []);
 
   const load = () => {
     setError("");
@@ -104,6 +110,8 @@ export default function Home() {
         setProducts(p);
       })
       .catch((e) => setError(errorOf(e)));
+    // Las ventas son un extra: si fallan, Inicio sigue funcionando.
+    salesOverview(range.from, range.to).then(setSales).catch(() => setSales(null));
   };
   useEffect(load, []);
 
@@ -161,9 +169,21 @@ export default function Home() {
         iconClassName: "text-slate-400 dark:text-slate-500",
         icon: <LuUserX size={13} />,
       },
+      {
+        key: "quiet",
+        label: "Sin reportar ventas en 3+ días",
+        href: "/metricas",
+        clients: stats.rows.filter((c) => {
+          const last = sales?.clients.find((s) => s.clientId === c.id)?.lastSaleAt;
+          return c.status === "ACTIVE" && !!last && Date.now() - new Date(last).getTime() > 3 * 86_400_000;
+        }),
+        badge: "warning",
+        iconClassName: "text-amber-500 dark:text-amber-400",
+        icon: <LuClockAlert size={13} />,
+      },
     ];
     return groups.filter((group) => group.clients.length > 0);
-  }, [stats]);
+  }, [stats, sales]);
 
   const upcoming = useMemo(() => {
     const rows: { client: ClientSummary; due: string }[] = [];
@@ -284,6 +304,7 @@ export default function Home() {
 
           {/* Tabla de clientes + panel de pendientes */}
           <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] xl:gap-5">
+            <div className="flex min-w-0 flex-col gap-4">
             <Card
               title="Clientes"
               subtitle={`${stats.active.length} activos · ${stats.overdue.length} con pago vencido`}
@@ -430,6 +451,86 @@ export default function Home() {
               </div>
             </Card>
 
+            {/* Ventas que reportan las apps de los clientes */}
+            <Card
+              title="Ventas de tus clientes"
+              subtitle={sales ? `Últimos 30 días · ${shortDate(sales.from)} – ${shortDate(sales.to)}` : "Lo que reportan sus apps"}
+              actions={
+                <ITButton size="sm" variant="text" color="gray" onClick={() => navigate("/metricas")}>
+                  <span className="inline-flex items-center gap-1">
+                    Ver métricas <LuArrowRight size={13} />
+                  </span>
+                </ITButton>
+              }
+            >
+              {!sales || sales.tickets === 0 ? (
+                <div className="flex items-start gap-2.5 rounded-xl border border-dashed border-slate-200 px-3 py-4 dark:border-slate-700">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300">
+                    <LuChartColumn size={16} />
+                  </span>
+                  <div>
+                    <p className="text-[13.5px] font-semibold text-slate-900 dark:text-white">Aún no hay ventas reportadas</p>
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                      Las apps de cocina (1.1.0 o más nueva) mandan cada cuenta cerrada cuando tienen internet.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+                  <div className="min-w-0">
+                    <div className="mb-3 flex flex-wrap items-end gap-x-4 gap-y-1">
+                      <p className="text-[28px] font-bold leading-none tracking-tight text-slate-900 dark:text-white">{pesos(sales.soldCents)}</p>
+                      <p className="text-xs">
+                        <Delta value={change(sales.soldCents, sales.previousSoldCents)} suffix="vs. 30 días anteriores" />
+                      </p>
+                    </div>
+                    <BarChart
+                      ariaLabel="Ventas de todos los clientes por día"
+                      format={pesos}
+                      height={140}
+                      labelEvery={5}
+                      data={sales.byDay.map((d) => ({
+                        key: d.date,
+                        label: String(new Date(`${d.date}T12:00:00`).getDate()),
+                        value: d.soldCents,
+                        title: new Date(`${d.date}T12:00:00`).toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "short" }),
+                        detail: `${d.tickets} cuentas`,
+                      }))}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+                      Quién vende más
+                    </p>
+                    <ul className="mt-2 divide-y divide-slate-100 dark:divide-slate-800">
+                      {sales.clients.slice(0, 5).map((s) => {
+                        const c = stats.rows.find((r) => r.id === s.clientId);
+                        return (
+                          <li key={s.clientId}>
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/metricas?cliente=${s.clientId}`)}
+                              className="flex w-full items-center gap-2.5 rounded-lg px-1 py-2 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                            >
+                              <Initials name={c?.name ?? "?"} size="sm" />
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-[13px] font-medium text-slate-900 dark:text-white">{c?.name ?? "Cliente"}</span>
+                                <span className="block truncate text-[11.5px] text-slate-500 dark:text-slate-400">
+                                  {s.tickets.toLocaleString("es-MX")} cuentas · ticket {pesos(s.averageTicketCents)}
+                                </span>
+                              </span>
+                              <span className="shrink-0 text-[13px] font-semibold tabular-nums text-slate-900 dark:text-white">{pesos(s.soldCents)}</span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </Card>
+          </div>
+
             <div className="flex min-w-0 flex-col gap-4">
               {/* Pendientes en tres grupos */}
               <Card
@@ -437,7 +538,10 @@ export default function Home() {
                 subtitle={
                   attentionGroupsEmpty
                     ? "Todo en orden"
-                    : `${stats.attention} ${stats.attention === 1 ? "cliente por revisar" : "clientes por revisar"}`
+                    : (() => {
+                        const n = new Set(attentionGroups.flatMap((g) => g.clients.map((c) => c.id))).size;
+                        return `${n} ${n === 1 ? "cliente por revisar" : "clientes por revisar"}`;
+                      })()
                 }
                 bodyClassName="p-2 sm:p-2.5"
               >
@@ -449,7 +553,7 @@ export default function Home() {
                     <div>
                       <p className="text-[13.5px] font-semibold text-slate-900 dark:text-white">Todo en orden</p>
                       <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                        Sin pagos vencidos, licencias sin activar ni cuentas suspendidas.
+                        Sin pagos vencidos, licencias sin activar, cuentas suspendidas ni apps calladas.
                       </p>
                     </div>
                   </div>
@@ -504,36 +608,6 @@ export default function Home() {
                     })}
                   </div>
                 )}
-              </Card>
-
-              {/* Atajos de operación */}
-              <Card title="Acciones rápidas" bodyClassName="p-3 sm:p-4">
-                <div className="flex flex-col gap-2">
-                  <ITButton icon={<LuPlus size={14} />} onClick={() => navigate("/clientes?nuevo=1")} className="w-full justify-start">
-                    Nuevo cliente
-                  </ITButton>
-                  <ITButton
-                    variant="outlined"
-                    icon={runs ? <LuRefreshCw size={14} className="animate-spin" /> : <LuReceipt size={14} />}
-                    onClick={() => setConfirmRun(true)}
-                    disabled={runs}
-                    className="w-full justify-start"
-                  >
-                    {runs ? "Generando cobros…" : "Generar cobros del mes"}
-                  </ITButton>
-                  <ITButton
-                    variant="outlined"
-                    color="gray"
-                    icon={<LuWallet size={14} />}
-                    onClick={() => navigate("/cobros")}
-                    className="w-full justify-start"
-                  >
-                    Revisar cobros
-                  </ITButton>
-                  <p className="mt-1 text-[11.5px] leading-relaxed text-slate-500 dark:text-slate-400">
-                    Los cobros del mes se generan solo para clientes activos con plan recurrente y sin cobro pendiente.
-                  </p>
-                </div>
               </Card>
 
               {/* Próximos cobros por fecha */}

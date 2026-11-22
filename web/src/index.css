@@ -151,3 +151,18 @@ body {
 .dark .it-select label {
   color: #cbd5e1;
 }
+
+/* Gráficas de ventas. Una sola serie va en el teal de la marca; efectivo y
+   transferencia usan el par categórico validado (azul/naranja) del método de dataviz. */
+:root {
+  --viz-bar: #387d92;
+  --viz-bar-soft: #c9dfe6;
+  --viz-cash: #2a78d6;
+  --viz-transfer: #eb6834;
+}
+:root.dark {
+  --viz-bar: #4598b1;
+  --viz-bar-soft: #23404b;
+  --viz-cash: #3987e5;
+  --viz-transfer: #d95926;
+}

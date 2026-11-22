@@ -52,6 +52,8 @@ export interface Device {
   name: string;
   /** Modelo del equipo con el que se activó. */
   model: string | null;
+  /** Versión de la app que reportó por última vez, p. ej. "1.1.0 (4)". */
+  appVersion: string | null;
   active: boolean;
   lastSeenAt: string | null;
   /** Primera activación real desde la app. */

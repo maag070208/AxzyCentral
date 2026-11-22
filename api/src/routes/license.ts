@@ -47,7 +47,8 @@ licenseRouter.get(
     const code = bearerOf(req.headers.authorization);
     if (!code) throw new HttpError(401, "TOKEN_MISSING", "Falta el código de activación");
     const device = await requireDeviceByCode(code);
-    res.set("Cache-Control", "no-store").json(await licensePayload(device, new Date()));
+    const version = req.header("x-app-version")?.trim().slice(0, 40) || undefined;
+    res.set("Cache-Control", "no-store").json(await licensePayload(device, new Date(), version));
   })
 );
 

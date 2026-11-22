@@ -774,7 +774,10 @@ function DevicesCard({
                       )}
                     </Td>
                     <Td>
-                      <span className="text-slate-500 dark:text-slate-400">{agoText(d.lastSeenAt)}</span>
+                      <span className="text-slate-500 dark:text-slate-400">
+                        {agoText(d.lastSeenAt)}
+                        {d.appVersion ? ` · v${d.appVersion}` : ""}
+                      </span>
                     </Td>
                     <Td>
                       <DeviceStatus device={d} />
@@ -818,6 +821,7 @@ function DevicesCard({
                 <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                   <span>{d.activatedAt ? `Activada el ${dateText(d.activatedAt)}` : "Aún sin primera activación"}</span>
                   <span>Última conexión: {agoText(d.lastSeenAt)}</span>
+                  {d.appVersion && <span>App v{d.appVersion}</span>}
                 </div>
                 <div className="mt-2.5 flex flex-wrap gap-1.5">
                   <ITButton size="sm" variant="outlined" icon={<LuQrCode size={13} />} onClick={() => onRotateQr(d)}>

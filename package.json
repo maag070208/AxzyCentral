@@ -5,6 +5,7 @@
   "packageManager": "pnpm@12.16.1",
   "scripts": {
     "dev": "pnpm --parallel --filter axzy-central-api --filter axzy-central-web dev",
+    "dev:local": "bash api/scripts/dev-local.sh",
     "dev:api": "pnpm --filter axzy-central-api dev",
     "dev:web": "pnpm --filter axzy-central-web dev",
     "build": "pnpm -r build",

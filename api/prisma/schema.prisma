@@ -81,6 +81,7 @@ model Client {
   payments    Payment[]
   devices     Device[]
   users       ClientUser[]
+  sales       Sale[]
 
   @@index([planId])
   @@index([productId])
@@ -137,7 +138,10 @@ model Device {
   lastSeenAt  DateTime?
   /// Primera activación real desde la app (no el alta en la consola).
   activatedAt DateTime?
+  /// Versión de la app que reportó por última vez (p. ej. "1.1.0 (4)").
+  appVersion  String?
   createdAt   DateTime  @default(now())
+  sales       Sale[]
 
   @@index([clientId])
   @@map("devices")
@@ -193,4 +197,53 @@ model ClientUserRole {
 
   @@id([userId, roleId])
   @@map("client_user_roles")
+}
+
+/// Cuenta cerrada que reporta la app de cocina. Una por cuenta y dispositivo:
+/// si la app la reenvía (reintento por mala señal) se reemplaza, no se duplica.
+/// Montos en centavos.
+model Sale {
+  id            String     @id @default(uuid())
+  clientId      String
+  client        Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  deviceId      String
+  device        Device     @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  /// Id de la cuenta dentro de la app.
+  externalId    String
+  table         String
+  accountNumber Int
+  openedAt      DateTime
+  closedAt      DateTime?
+  /// Minutos respecto a UTC de la hora del local: las métricas por hora y día van en hora local.
+  utcOffsetMin  Int
+  cancelled     Boolean    @default(false)
+  totalCents    Int
+  cashCents     Int
+  transferCents Int
+  persons       Int
+  /// Promedio de segundos entre que la orden llega a cocina y se entrega.
+  prepSeconds   Int?
+  appVersion    String?
+  receivedAt    DateTime   @default(now())
+  lines         SaleLine[]
+
+  @@unique([deviceId, externalId])
+  @@index([clientId, openedAt])
+  @@map("sales")
+}
+
+model SaleLine {
+  id        String  @id @default(uuid())
+  saleId    String
+  sale      Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId String
+  name      String
+  /// Presentación (Maíz, Harina…); vacío si no tiene.
+  variant   String  @default("")
+  category  String?
+  qty       Int
+  unitCents Int
+
+  @@index([saleId])
+  @@map("sale_lines")
 }

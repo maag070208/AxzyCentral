@@ -85,6 +85,7 @@ const deviceView = (d: Device) => ({
   id: d.id,
   name: d.name,
   model: d.model,
+  appVersion: d.appVersion,
   active: d.active,
   lastSeenAt: d.lastSeenAt?.toISOString() ?? null,
   activatedAt: d.activatedAt?.toISOString() ?? null,

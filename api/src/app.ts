@@ -14,7 +14,7 @@ import { rolesRouter } from "./routes/roles";
 import { appRouter } from "./routes/app";
 import { productsRouter } from "./routes/products";
 import { billingRouter, paymentsRouter } from "./routes/payments";
-import { clientSalesRouter, salesRouter } from "./routes/sales";
+import { clientSalesRouter, salesOverviewRouter, salesRouter } from "./routes/sales";
 
 export const createApp = () => {
   const app = express();
@@ -46,6 +46,7 @@ export const createApp = () => {
   admin.use("/clients", clientUsersRouter);
   admin.use("/clients", clientsRouter);
   admin.use("/clients", clientSalesRouter);
+  admin.use("/sales-overview", salesOverviewRouter);
   admin.use("/payments", paymentsRouter);
   admin.use("/billing", billingRouter);
   api.use(admin);

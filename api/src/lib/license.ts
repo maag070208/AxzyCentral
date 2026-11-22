@@ -66,13 +66,14 @@ export const nextDueDateOf = async (clientId: string): Promise<Date | null> => {
 };
 
 /**
- * Respuesta de `GET /license`: marca `lastSeenAt` y arma el cuerpo. Compartida
+ * Respuesta de `GET /license`: marca `lastSeenAt` (y la versión de la app si la
+ * manda en `X-App-Version`) y arma el cuerpo. Compartida
  * con `POST /activate` para no duplicar lógica (contrato §5.2).
  */
-export const licensePayload = async (device: LicenseDevice, now: Date): Promise<LicenseBody> => {
+export const licensePayload = async (device: LicenseDevice, now: Date, appVersion?: string): Promise<LicenseBody> => {
   const [nextDueDate] = await Promise.all([
     nextDueDateOf(device.clientId),
-    db.device.update({ where: { id: device.id }, data: { lastSeenAt: now } }),
+    db.device.update({ where: { id: device.id }, data: { lastSeenAt: now, appVersion } }),
   ]);
   return licenseBody(device.client, nextDueDate, now);
 };

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { ITLayout, useITTheme, type ITNavigationItem } from "@axzydev/axzy_ui_system";
-import { LuBoxes, LuLayoutDashboard, LuReceipt, LuTags, LuUsers } from "react-icons/lu";
+import { LuBoxes, LuChartColumn, LuLayoutDashboard, LuReceipt, LuTags, LuUsers } from "react-icons/lu";
 import { api, session, setUnauthorizedHandler, type Me } from "./api";
 import { AxzyLoader } from "./AxzyLogo";
 import ClientDetail from "./pages/ClientDetail";
@@ -9,12 +9,14 @@ import Clients from "./pages/Clients";
 import Cobros from "./pages/Cobros";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
+import Metrics from "./pages/Metrics";
 import Plans from "./pages/Plans";
 import Products from "./pages/Products";
 
 const NAV = [
   { id: "home", path: "/", label: "Inicio", icon: <LuLayoutDashboard size={18} /> },
   { id: "clients", path: "/clientes", label: "Clientes", icon: <LuUsers size={18} /> },
+  { id: "metrics", path: "/metricas", label: "Métricas", icon: <LuChartColumn size={18} /> },
   { id: "payments", path: "/cobros", label: "Cobros", icon: <LuReceipt size={18} /> },
   { id: "products", path: "/productos", label: "Productos", icon: <LuBoxes size={18} /> },
   { id: "plans", path: "/planes", label: "Planes", icon: <LuTags size={18} /> },
@@ -116,6 +118,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/clientes" element={<Clients />} />
         <Route path="/clientes/:id" element={<ClientDetail />} />
+        <Route path="/metricas" element={<Metrics />} />
         <Route path="/cobros" element={<Cobros />} />
         <Route path="/productos" element={<Products />} />
         <Route path="/planes" element={<Plans />} />
