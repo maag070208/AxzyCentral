@@ -8,6 +8,7 @@ import {
   LuChartColumn,
   LuClockAlert,
   LuBoxes,
+  LuBug,
   LuChevronRight,
   LuCircleAlert,
   LuCircleCheckBig,
@@ -100,6 +101,7 @@ export default function Home() {
   const [payClient, setPayClient] = useState<ClientSummary | null>(null);
   const [filter, setFilter] = useState<ClientFilter>("all");
   const [sales, setSales] = useState<SalesOverview | null>(null);
+  const [crashes, setCrashes] = useState<{ clientId: string; count: number }[]>([]);
   const range = useMemo(() => periodRange("30d"), []);
 
   const load = () => {
@@ -112,6 +114,7 @@ export default function Home() {
       .catch((e) => setError(errorOf(e)));
     // Las ventas son un extra: si fallan, Inicio sigue funcionando.
     salesOverview(range.from, range.to).then(setSales).catch(() => setSales(null));
+    api<{ clientId: string; count: number }[]>("GET", "/app-errors/recent?days=7").then(setCrashes).catch(() => setCrashes([]));
   };
   useEffect(load, []);
 
@@ -181,9 +184,18 @@ export default function Home() {
         iconClassName: "text-amber-500 dark:text-amber-400",
         icon: <LuClockAlert size={13} />,
       },
+      {
+        key: "crashes",
+        label: "La app se cerró sola (7 días)",
+        href: "/clientes",
+        clients: stats.rows.filter((c) => crashes.some((x) => x.clientId === c.id)),
+        badge: "danger",
+        iconClassName: "text-rose-500 dark:text-rose-400",
+        icon: <LuBug size={13} />,
+      },
     ];
     return groups.filter((group) => group.clients.length > 0);
-  }, [stats, sales]);
+  }, [stats, sales, crashes]);
 
   const upcoming = useMemo(() => {
     const rows: { client: ClientSummary; due: string }[] = [];

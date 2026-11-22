@@ -20,7 +20,23 @@ test("licencia activa con cobro pendiente: mismo contrato de siempre", () => {
     nextDueDate: "2026-12-01",
     validUntil: new Date("2026-12-06T00:00:00.000Z").toISOString(),
     serverTime: now.toISOString(),
+    limits: { kitchens: null, waiters: null },
+    latestApp: null,
   });
+});
+
+test("límites del plan y última versión publicada", () => {
+  const body = licenseBody(
+    {
+      ...client,
+      plan: { name: "Básico", maxKitchens: 1, maxWaiters: 2 },
+      product: { ...client.product, latestVersionCode: 6, latestVersionName: "1.3.0", latestUrl: "https://example.com/apk" },
+    },
+    null,
+    now
+  );
+  assert.deepEqual(body.limits, { kitchens: 1, waiters: 2 });
+  assert.deepEqual(body.latestApp, { versionCode: 6, versionName: "1.3.0", url: "https://example.com/apk", notes: null });
 });
 
 test("licencia sin plan ni cobros: plan nulo y ventana por defecto", () => {

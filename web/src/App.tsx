@@ -9,6 +9,7 @@ import Clients from "./pages/Clients";
 import Cobros from "./pages/Cobros";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
+import MonthlyReport from "./pages/MonthlyReport";
 import Metrics from "./pages/Metrics";
 import Plans from "./pages/Plans";
 import Products from "./pages/Products";
@@ -63,6 +64,9 @@ export default function App() {
       </div>
     );
   }
+
+  // El reporte mensual es una hoja para imprimir: va sin el menú de la consola.
+  if (pathname.startsWith("/reporte")) return <MonthlyReport />;
 
   const toggleTheme = () => setDarkModeMode(dark ? "light" : "dark");
 

@@ -28,6 +28,15 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     res.status(409).json({ code: "ALREADY_EXISTS", message: "Ya existe un registro con esos datos" });
     return;
   }
+  // Errores de express.json: cuerpo demasiado grande o JSON mal formado.
+  if (err?.type === "entity.too.large") {
+    res.status(413).json({ code: "PAYLOAD_TOO_LARGE", message: "Los datos son demasiado grandes" });
+    return;
+  }
+  if (err?.type === "entity.parse.failed") {
+    res.status(400).json({ code: "VALIDATION_ERROR", message: "JSON inválido" });
+    return;
+  }
   console.error(err);
   res.status(500).json({ code: "INTERNAL_ERROR", message: "Algo salió mal. Intenta de nuevo." });
 };

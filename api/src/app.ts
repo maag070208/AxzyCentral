@@ -15,12 +15,16 @@ import { appRouter } from "./routes/app";
 import { productsRouter } from "./routes/products";
 import { billingRouter, paymentsRouter } from "./routes/payments";
 import { clientSalesRouter, salesOverviewRouter, salesRouter } from "./routes/sales";
+import { BACKUP_LIMIT, backupRouter } from "./routes/backup";
+import { appErrorsRouter, clientAppErrorsRouter, recentAppErrorsRouter } from "./routes/app-errors";
 
 export const createApp = () => {
   const app = express();
   app.set("trust proxy", 1);
   app.use(helmet());
   app.use(cors({ origin: config.WEB_ORIGIN.split(",").map((o) => o.trim()) }));
+  // El respaldo de la cocina trae el estado completo; lo demás es chico.
+  app.use("/api/v1/backup", express.json({ limit: BACKUP_LIMIT }));
   app.use(express.json({ limit: "100kb" }));
 
   app.get("/health", (_req, res) => {
@@ -33,6 +37,8 @@ export const createApp = () => {
   api.use("/activate", activateRouter);
   api.use("/license", licenseRouter);
   api.use("/sales", salesRouter);
+  api.use("/backup", backupRouter);
+  api.use("/app-errors", appErrorsRouter);
   api.use("/auth", authRouter);
   // App del cliente: `/login` es público (con rate limit); `/me` y `/password`
   // validan su propio token de app.
@@ -46,6 +52,8 @@ export const createApp = () => {
   admin.use("/clients", clientUsersRouter);
   admin.use("/clients", clientsRouter);
   admin.use("/clients", clientSalesRouter);
+  admin.use("/clients", clientAppErrorsRouter);
+  admin.use("/app-errors", recentAppErrorsRouter);
   admin.use("/sales-overview", salesOverviewRouter);
   admin.use("/payments", paymentsRouter);
   admin.use("/billing", billingRouter);

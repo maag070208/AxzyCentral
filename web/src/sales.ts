@@ -105,3 +105,70 @@ export const hourLabel = (h: number) => `${String(h).padStart(2, "0")}:00`;
 
 export const shortDate = (iso: string) =>
   new Date(`${iso}T12:00:00`).toLocaleDateString("es-MX", { day: "numeric", month: "short" });
+
+/** Frases para el cliente a partir de sus números. Solo las que tienen datos suficientes. */
+export function insightsOf(m: SalesMetrics): string[] {
+  const out: string[] = [];
+  if (m.tickets === 0) return out;
+  const hours = m.byHour.map((b, h) => ({ h, ...b })).filter((b) => b.tickets > 0);
+  const peak = [...hours].sort((a, b) => b.soldCents - a.soldCents)[0];
+  if (peak) {
+    out.push(
+      `La hora fuerte es de ${hourLabel(peak.h)} a ${hourLabel((peak.h + 1) % 24)}: ahí entra el ${pct(peak.soldCents / m.soldCents)} de lo vendido.`
+    );
+  }
+  const days = m.byWeekday.map((b, d) => ({ d, ...b })).filter((b) => b.soldCents > 0);
+  if (days.length >= 2) {
+    const best = days.reduce((a, b) => (b.soldCents > a.soldCents ? b : a));
+    const worst = days.reduce((a, b) => (b.soldCents < a.soldCents ? b : a));
+    if (worst.soldCents > 0 && best.d !== worst.d) {
+      out.push(
+        `El ${WEEKDAYS_LONG[best.d]} vende ${(best.soldCents / worst.soldCents).toLocaleString("es-MX", { maximumFractionDigits: 1 })} veces lo del ${WEEKDAYS_LONG[worst.d]}.`
+      );
+    }
+  }
+  const star = m.products[0];
+  if (star) out.push(`${star.name} es el ${pct(star.share)} de las ventas (${star.qty.toLocaleString("es-MX")} piezas).`);
+  if (m.prepSecondsP90 !== null && m.prepSecondsAvg !== null) {
+    out.push(`Una orden sale de cocina en ${minutes(m.prepSecondsAvg)} en promedio; 1 de cada 10 tarda más de ${minutes(m.prepSecondsP90)}.`);
+  }
+  return out;
+}
+
+
+/* ---------------- Meses ---------------- */
+
+/** "2026-11" del mes pasado (el reporte se arma con meses ya cerrados). */
+export const lastMonthKey = (now = new Date()) => {
+  const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+};
+
+/** Rango del mes "AAAA-MM" y del mes anterior completo. Un mes en curso termina hoy. */
+export function monthRange(key: string, now = new Date()) {
+  const [y, m] = key.split("-").map(Number);
+  const first = new Date(y, m - 1, 1);
+  const last = new Date(y, m, 0);
+  const end = last > now ? new Date(now.getFullYear(), now.getMonth(), now.getDate()) : last;
+  const prevFirst = new Date(y, m - 2, 1);
+  const prevLast = new Date(y, m - 1, 0);
+  return {
+    from: isoDate(first),
+    to: isoDate(end),
+    prevFrom: isoDate(prevFirst),
+    prevTo: isoDate(prevLast),
+    label: first.toLocaleDateString("es-MX", { month: "long", year: "numeric" }).replace(/^./, (c) => c.toUpperCase()),
+    prevLabel: prevFirst.toLocaleDateString("es-MX", { month: "long" }),
+    partial: last > now,
+  };
+}
+
+/** Últimos [n] meses como opciones "AAAA-MM", del más reciente al más viejo. */
+export const recentMonths = (n: number, now = new Date()) =>
+  Array.from({ length: n }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    return {
+      value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+      label: d.toLocaleDateString("es-MX", { month: "long", year: "numeric" }).replace(/^./, (c) => c.toUpperCase()),
+    };
+  });

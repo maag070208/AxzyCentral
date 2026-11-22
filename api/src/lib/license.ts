@@ -13,8 +13,15 @@ export type LicenseDevice = Device & {
 export interface LicenseClient {
   name: string;
   status: "ACTIVE" | "SUSPENDED";
-  plan: { name: string } | null;
-  product: { key: string; name: string };
+  plan: { name: string; maxKitchens?: number | null; maxWaiters?: number | null } | null;
+  product: {
+    key: string;
+    name: string;
+    latestVersionCode?: number | null;
+    latestVersionName?: string | null;
+    latestUrl?: string | null;
+    latestNotes?: string | null;
+  };
 }
 
 export interface LicenseBody {
@@ -25,6 +32,10 @@ export interface LicenseBody {
   nextDueDate: string | null;
   validUntil: string;
   serverTime: string;
+  /** Lo que incluye el plan; null = ilimitado (sin plan también es ilimitado). */
+  limits: { kitchens: number | null; waiters: number | null };
+  /** Última versión publicada de la app; la app avisa si la suya es menor. */
+  latestApp: { versionCode: number; versionName: string; url: string | null; notes: string | null } | null;
 }
 
 /**
@@ -39,6 +50,16 @@ export const licenseBody = (t: LicenseClient, nextDueDate: Date | null, now: Dat
   nextDueDate: nextDueDate ? nextDueDate.toISOString().slice(0, 10) : null,
   validUntil: licenseValidUntil(now, t.status, nextDueDate).toISOString(),
   serverTime: now.toISOString(),
+  limits: { kitchens: t.plan?.maxKitchens ?? null, waiters: t.plan?.maxWaiters ?? null },
+  latestApp:
+    t.product.latestVersionCode != null
+      ? {
+          versionCode: t.product.latestVersionCode,
+          versionName: t.product.latestVersionName ?? String(t.product.latestVersionCode),
+          url: t.product.latestUrl ?? null,
+          notes: t.product.latestNotes ?? null,
+        }
+      : null,
 });
 
 /** Dispositivo dueño de un código de activación, con su cliente, plan y producto. */

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { ITSegmentedControl } from "@axzydev/axzy_ui_system";
-import { LuChefHat, LuCircleX, LuLightbulb, LuReceipt, LuShoppingBag, LuUsers, LuWallet } from "react-icons/lu";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { ITButton, ITSegmentedControl } from "@axzydev/axzy_ui_system";
+import { LuChefHat, LuCircleX, LuFileText, LuLightbulb, LuReceipt, LuShoppingBag, LuUsers, LuWallet } from "react-icons/lu";
 import { api, type ClientSummary } from "../api";
 import { BarChart, Delta, ShareList, SplitBar } from "../components/SalesCharts";
 import {
@@ -10,6 +10,7 @@ import {
   WEEKDAYS_LONG,
   change,
   hourLabel,
+  insightsOf,
   minutes,
   pct,
   periodRange,
@@ -23,36 +24,8 @@ import {
 import { errorOf } from "../shared";
 import { Card, Empty, Page, StatCard } from "../ui";
 
-/** Frases para el cliente a partir de sus números. Solo las que tienen datos suficientes. */
-function insightsOf(m: SalesMetrics): string[] {
-  const out: string[] = [];
-  if (m.tickets === 0) return out;
-  const hours = m.byHour.map((b, h) => ({ h, ...b })).filter((b) => b.tickets > 0);
-  const peak = [...hours].sort((a, b) => b.soldCents - a.soldCents)[0];
-  if (peak) {
-    out.push(
-      `La hora fuerte es de ${hourLabel(peak.h)} a ${hourLabel((peak.h + 1) % 24)}: ahí entra el ${pct(peak.soldCents / m.soldCents)} de lo vendido.`
-    );
-  }
-  const days = m.byWeekday.map((b, d) => ({ d, ...b })).filter((b) => b.soldCents > 0);
-  if (days.length >= 2) {
-    const best = days.reduce((a, b) => (b.soldCents > a.soldCents ? b : a));
-    const worst = days.reduce((a, b) => (b.soldCents < a.soldCents ? b : a));
-    if (worst.soldCents > 0 && best.d !== worst.d) {
-      out.push(
-        `El ${WEEKDAYS_LONG[best.d]} vende ${(best.soldCents / worst.soldCents).toLocaleString("es-MX", { maximumFractionDigits: 1 })} veces lo del ${WEEKDAYS_LONG[worst.d]}.`
-      );
-    }
-  }
-  const star = m.products[0];
-  if (star) out.push(`${star.name} es el ${pct(star.share)} de las ventas (${star.qty.toLocaleString("es-MX")} piezas).`);
-  if (m.prepSecondsP90 !== null && m.prepSecondsAvg !== null) {
-    out.push(`Una orden sale de cocina en ${minutes(m.prepSecondsAvg)} en promedio; 1 de cada 10 tarda más de ${minutes(m.prepSecondsP90)}.`);
-  }
-  return out;
-}
-
 export default function Metrics() {
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const period = (PERIODS.some((p) => p.value === params.get("periodo")) ? params.get("periodo") : "30d") as PeriodKey;
   const range = useMemo(() => periodRange(period), [period]);
@@ -149,9 +122,16 @@ export default function Metrics() {
         />
       ) : (
         <div className={`flex flex-col gap-4 transition-opacity lg:gap-5 ${loading ? "opacity-60" : ""}`}>
-          <p className="-mt-2 text-[13px] text-slate-500 dark:text-slate-400">
-            {client?.name} · {shortDate(m.from)} – {shortDate(m.to)} · comparado con {shortDate(range.prevFrom)} – {shortDate(range.prevTo)}
-          </p>
+          <div className="-mt-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[13px] text-slate-500 dark:text-slate-400">
+              {client?.name} · {shortDate(m.from)} – {shortDate(m.to)} · comparado con {shortDate(range.prevFrom)} – {shortDate(range.prevTo)}
+            </p>
+            {clientId && (
+              <ITButton size="sm" variant="outlined" icon={<LuFileText size={14} />} onClick={() => navigate(`/reporte?cliente=${clientId}`)}>
+                Reporte mensual para el cliente
+              </ITButton>
+            )}
+          </div>
 
           <div className="axc-stagger grid grid-cols-2 gap-3 xl:grid-cols-4">
             <StatCard

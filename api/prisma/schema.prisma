@@ -26,6 +26,13 @@ model Product {
   name        String
   description String?
   active      Boolean  @default(true)
+  /// Última versión publicada de la app: la app la compara con la suya y avisa
+  /// que hay que actualizar. Sin `latestVersionCode` no se avisa nada.
+  latestVersionCode Int?
+  latestVersionName String?
+  /// Enlace de descarga del APK (p. ej. la carpeta de Drive).
+  latestUrl         String?
+  latestNotes       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   plans       Plan[]
@@ -49,6 +56,10 @@ model Plan {
   /// Precio mensual si `billingType` es RECURRING; precio único si es ONE_TIME.
   price       Decimal     @db.Decimal(10, 2)
   billingType BillingType @default(RECURRING)
+  /// Teléfonos de cocina (dispositivos con código) que incluye; null = ilimitados.
+  maxKitchens Int?
+  /// Meseras conectadas a la vez a la cocina; null = ilimitadas. Lo hace cumplir la cocina.
+  maxWaiters  Int?
   /// Un plan dado de baja ya no se asigna; quien lo tiene lo conserva.
   active      Boolean     @default(true)
   createdAt   DateTime    @default(now())
@@ -82,6 +93,8 @@ model Client {
   devices     Device[]
   users       ClientUser[]
   sales       Sale[]
+  backup      Backup?
+  appErrors   AppError[]
 
   @@index([planId])
   @@index([productId])
@@ -142,6 +155,8 @@ model Device {
   appVersion  String?
   createdAt   DateTime  @default(now())
   sales       Sale[]
+  backups     Backup[]
+  appErrors   AppError[]
 
   @@index([clientId])
   @@map("devices")
@@ -246,4 +261,46 @@ model SaleLine {
 
   @@index([saleId])
   @@map("sale_lines")
+}
+
+/// Último respaldo del teléfono de cocina de un cliente: su estado completo
+/// (menú, cuentas abiertas y órdenes) para recuperarlo si el teléfono se pierde.
+/// Uno por cliente; cada envío lo reemplaza.
+model Backup {
+  clientId   String   @id
+  client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  deviceId   String
+  device     Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  /// Cuándo se tomó en el teléfono.
+  savedAt    DateTime
+  appVersion String?
+  state      Json
+  sizeBytes  Int
+  receivedAt DateTime @default(now()) @updatedAt
+
+  @@map("backups")
+}
+
+/// Falla de la app (cierre inesperado) que reporta el teléfono de cocina; las de
+/// las meseras llegan a través de la cocina. Se guarda una vez por dispositivo e id.
+model AppError {
+  id         String   @id @default(uuid())
+  clientId   String
+  client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  deviceId   String
+  device     Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  /// Id que le puso la app (no se duplica si la reenvía).
+  externalId String
+  /// "cocina" o "mesero".
+  source     String
+  appVersion String?
+  model      String?
+  occurredAt DateTime
+  message    String
+  stack      String
+  receivedAt DateTime @default(now())
+
+  @@unique([deviceId, externalId])
+  @@index([clientId, occurredAt])
+  @@map("app_errors")
 }

@@ -6,11 +6,16 @@ import { asyncHandler, HttpError } from "../errors";
 
 const BillingType = z.enum(["RECURRING", "ONE_TIME"]);
 
+/** Cuántos incluye el plan; null = ilimitados. */
+const Limit = z.number().int().min(1).max(1_000).nullable();
+
 const PlanInput = z.object({
   productId: z.string().uuid(),
   name: z.string().trim().min(2).max(80),
   billingType: BillingType.default("RECURRING"),
   price: z.number().min(0).max(1_000_000),
+  maxKitchens: Limit.default(null),
+  maxWaiters: Limit.default(null),
 });
 /** Sin `default` en `billingType`: un PATCH que no lo manda no debe tocar el tipo. */
 const PlanUpdate = z
@@ -19,6 +24,8 @@ const PlanUpdate = z
     billingType: BillingType,
     price: z.number().min(0).max(1_000_000),
     active: z.boolean(),
+    maxKitchens: Limit,
+    maxWaiters: Limit,
   })
   .partial();
 
@@ -29,6 +36,8 @@ export const planView = (p: Plan & { product?: Product }) => ({
   name: p.name,
   price: p.price.toFixed(2),
   billingType: p.billingType,
+  maxKitchens: p.maxKitchens,
+  maxWaiters: p.maxWaiters,
   active: p.active,
 });
 

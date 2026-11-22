@@ -19,6 +19,27 @@ export interface Product {
   active: boolean;
   clients?: number;
   plans?: number;
+  /** Última versión publicada de la app; la app avisa si la suya es menor. */
+  latestApp?: LatestApp | null;
+}
+
+export interface LatestApp {
+  versionCode: number;
+  versionName: string;
+  url: string | null;
+  notes: string | null;
+}
+
+/** Falla de la app que reportó un teléfono. */
+export interface AppErrorItem {
+  id: string;
+  source: "cocina" | "mesero";
+  appVersion: string | null;
+  model: string | null;
+  occurredAt: string;
+  message: string;
+  stack: string;
+  deviceName: string;
 }
 
 export interface Plan {
@@ -29,6 +50,10 @@ export interface Plan {
   /** Precio mensual si `billingType` es RECURRING; precio único si es ONE_TIME. */
   price: string;
   billingType: BillingType;
+  /** Teléfonos de cocina que incluye; null = ilimitados. */
+  maxKitchens: number | null;
+  /** Meseras a la vez; null = ilimitadas. */
+  maxWaiters: number | null;
   active: boolean;
   clients?: number;
 }
@@ -199,6 +224,8 @@ export interface PlanBody {
   name: string;
   billingType?: BillingType;
   price: number;
+  maxKitchens?: number | null;
+  maxWaiters?: number | null;
 }
 
 export interface PlanPatch {
@@ -206,6 +233,8 @@ export interface PlanPatch {
   billingType?: BillingType;
   price?: number;
   active?: boolean;
+  maxKitchens?: number | null;
+  maxWaiters?: number | null;
 }
 
 export interface PaymentPatch {
@@ -408,3 +437,11 @@ export const priceWithSuffix = (price: string | number, type: BillingType) =>
 export const paymentConcept = (payment: Pick<Payment, "kind" | "concept" | "period">) =>
   payment.concept?.trim() ||
   (payment.kind === "ONE_TIME" ? "Pago único" : payment.period ? periodText(payment.period) : "Sin periodo");
+
+/** "1 cocina · 2 meseras", "Ilimitado"… lo que incluye un plan. */
+export const planLimits = (p: Pick<Plan, "maxKitchens" | "maxWaiters">) => {
+  if (p.maxKitchens == null && p.maxWaiters == null) return "Ilimitado";
+  const k = p.maxKitchens == null ? "cocinas ilimitadas" : `${p.maxKitchens} ${p.maxKitchens === 1 ? "cocina" : "cocinas"}`;
+  const w = p.maxWaiters == null ? "meseras ilimitadas" : `${p.maxWaiters} ${p.maxWaiters === 1 ? "mesera" : "meseras"}`;
+  return `${k} · ${w}`;
+};

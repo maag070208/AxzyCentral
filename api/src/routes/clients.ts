@@ -125,6 +125,23 @@ const findFull = async (id: string): Promise<Full> => {
   return t;
 };
 
+/**
+ * El plan limita los teléfonos de cocina activos. Bajar de plan no revoca a
+ * nadie: solo impide dar de alta o reactivar más de los que incluye.
+ */
+const assertKitchenSlot = (t: Full, exceptDeviceId?: string) => {
+  const max = t.plan?.maxKitchens;
+  if (max == null) return;
+  const active = t.devices.filter((d) => d.active && d.id !== exceptDeviceId).length;
+  if (active >= max) {
+    throw new HttpError(
+      409,
+      "PLAN_LIMIT",
+      `El plan ${t.plan!.name} incluye ${max} ${max === 1 ? "teléfono" : "teléfonos"} de cocina. Revoca uno o cambia de plan.`
+    );
+  }
+};
+
 const detail = (t: Full) => ({
   ...summary(t),
   payments: [...t.payments].sort((a, b) => b.dueDate.getTime() - a.dueDate.getTime()).map(paymentView),
@@ -253,6 +270,7 @@ clientsRouter.post(
   asyncHandler(async (req, res) => {
     const { name } = DeviceInput.parse(req.body);
     const t = await findFull(req.params.id);
+    assertKitchenSlot(t);
     const { code, tokenHash } = newDeviceCode();
     const device = await db.device.create({ data: { clientId: t.id, name, tokenHash } });
     res.status(201).json({ device: deviceView(device), code });
@@ -265,6 +283,8 @@ clientsRouter.post(
   asyncHandler(async (req, res) => {
     const device = await db.device.findFirst({ where: { id: req.params.deviceId, clientId: req.params.id } });
     if (!device) throw new HttpError(404, "DEVICE_NOT_FOUND", "Dispositivo no encontrado");
+    // Un código nuevo reactiva el dispositivo: cuenta contra el plan si estaba revocado.
+    if (!device.active) assertKitchenSlot(await findFull(req.params.id), device.id);
     const { code, tokenHash } = newDeviceCode();
     const updated = await db.device.update({ where: { id: device.id }, data: { tokenHash, active: true } });
     res.json({ device: deviceView(updated), code });
@@ -277,6 +297,7 @@ clientsRouter.patch(
     const { active } = DeviceUpdate.parse(req.body);
     const device = await db.device.findFirst({ where: { id: req.params.deviceId, clientId: req.params.id } });
     if (!device) throw new HttpError(404, "DEVICE_NOT_FOUND", "Dispositivo no encontrado");
+    if (active && !device.active) assertKitchenSlot(await findFull(req.params.id), device.id);
     await db.device.update({ where: { id: device.id }, data: { active } });
     res.json(detail(await findFull(req.params.id)));
   })

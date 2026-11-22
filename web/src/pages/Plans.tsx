@@ -11,12 +11,45 @@ import {
   ITText,
 } from "@axzydev/axzy_ui_system";
 import { LuPencil, LuPlus, LuReceipt, LuRepeat, LuTag, LuUsers } from "react-icons/lu";
-import { api, money, type BillingType, type Plan, type PlanBody, type PlanPatch, type Product } from "../api";
+import { api, money, planLimits, type BillingType, type Plan, type PlanBody, type PlanPatch, type Product } from "../api";
 import { useNotify } from "../toast";
 import { BillingTypeBadge, CountUp, errorOf } from "../shared";
 import { Card, Empty, Page, StatCard, TableWrap, Td, Th } from "../ui";
 
-const EMPTY = { productId: "", name: "", price: "", billingType: "RECURRING" as BillingType };
+const EMPTY = { productId: "", name: "", price: "", billingType: "RECURRING" as BillingType, maxKitchens: "1", maxWaiters: "2" };
+
+/** Vacío = ilimitado. */
+const limitOf = (v: string) => (v.trim() === "" ? null : Math.max(1, Math.floor(Number(v))));
+const limitInvalid = (v: string) => v.trim() !== "" && !(Number(v) >= 1);
+
+/** Cuántos teléfonos incluye el plan; vacío es ilimitado. */
+function LimitFields({ kitchens, waiters, onChange }: { kitchens: string; waiters: string; onChange: (k: string, w: string) => void }) {
+  return (
+    <>
+      <ITInput
+        name="maxKitchens"
+        type="number"
+        label="Teléfonos de cocina"
+        value={kitchens}
+        onChange={(e) => onChange(e.target.value, waiters)}
+        placeholder="Ilimitados"
+      />
+      <ITInput
+        name="maxWaiters"
+        type="number"
+        label="Meseras a la vez"
+        value={waiters}
+        onChange={(e) => onChange(kitchens, e.target.value)}
+        placeholder="Ilimitadas"
+      />
+      <div className="sm:col-span-2 -mt-2">
+        <ITText muted className="text-xs">
+          Déjalo vacío para ilimitado. La Central no deja dar de alta más cocinas; la cocina no acepta más meseras conectadas.
+        </ITText>
+      </div>
+    </>
+  );
+}
 
 export default function Plans() {
   const notify = useNotify();
@@ -29,7 +62,7 @@ export default function Plans() {
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<Plan | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", price: "", billingType: "RECURRING" as BillingType });
+  const [editForm, setEditForm] = useState({ name: "", price: "", billingType: "RECURRING" as BillingType, maxKitchens: "", maxWaiters: "" });
   const [editBusy, setEditBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -72,6 +105,8 @@ export default function Plans() {
       name: form.name.trim(),
       billingType: form.billingType,
       price: Number(form.price),
+      maxKitchens: limitOf(form.maxKitchens),
+      maxWaiters: limitOf(form.maxWaiters),
     };
     if (await run(() => api("POST", "/plans", body), "Plan agregado")) {
       setCreating(false);
@@ -82,7 +117,13 @@ export default function Plans() {
 
   const openEdit = (plan: Plan) => {
     setEditing(plan);
-    setEditForm({ name: plan.name, price: String(Number(plan.price)), billingType: plan.billingType });
+    setEditForm({
+      name: plan.name,
+      price: String(Number(plan.price)),
+      billingType: plan.billingType,
+      maxKitchens: plan.maxKitchens == null ? "" : String(plan.maxKitchens),
+      maxWaiters: plan.maxWaiters == null ? "" : String(plan.maxWaiters),
+    });
   };
 
   const saveEdit = async (e: FormEvent) => {
@@ -93,6 +134,8 @@ export default function Plans() {
       name: editForm.name.trim(),
       price: Number(editForm.price),
       billingType: editForm.billingType,
+      maxKitchens: limitOf(editForm.maxKitchens),
+      maxWaiters: limitOf(editForm.maxWaiters),
     };
     const ok = await run(() => api("PATCH", `/plans/${editing.id}`, patch), "Plan actualizado");
     setEditBusy(false);
@@ -183,6 +226,7 @@ export default function Plans() {
                 <Th>Producto</Th>
                 <Th>Tipo de cobro</Th>
                 <Th className="text-right">Precio</Th>
+                <Th>Incluye</Th>
                 <Th className="text-right">Clientes</Th>
                 <Th>Estado</Th>
                 <Th className="text-right">Acciones</Th>
@@ -202,6 +246,7 @@ export default function Plans() {
                     <span className="text-[15px] font-bold tabular-nums text-slate-900 dark:text-white">{money(p.price)}</span>
                     <span className="ml-1 text-xs text-slate-400">{p.billingType === "RECURRING" ? "/mes" : "único"}</span>
                   </Td>
+                  <Td className="text-slate-600 dark:text-slate-300">{planLimits(p)}</Td>
                   <Td className="text-right tabular-nums">{p.clients ?? 0}</Td>
                   <Td>{p.active ? <ITBadget color="success" label="Activo" size="sm" /> : <ITBadget color="gray" label="Dado de baja" size="sm" />}</Td>
                   <Td>
@@ -277,6 +322,7 @@ export default function Plans() {
                 : "Se cobra una sola vez: instalación o cargo inicial."}
             </ITText>
           </div>
+          <LimitFields kitchens={form.maxKitchens} waiters={form.maxWaiters} onChange={(k, w) => setForm({ ...form, maxKitchens: k, maxWaiters: w })} />
           {productPlans.length > 0 && (
             <div className="sm:col-span-2">
               <ITAlert variant="info">
@@ -288,7 +334,7 @@ export default function Plans() {
             <ITButton type="button" variant="outlined" color="gray" onClick={() => setCreating(false)}>
               Cancelar
             </ITButton>
-            <ITButton type="submit" disabled={busy || !form.productId || form.name.trim().length < 2 || form.price === ""}>
+            <ITButton type="submit" disabled={busy || !form.productId || form.name.trim().length < 2 || form.price === "" || limitInvalid(form.maxKitchens) || limitInvalid(form.maxWaiters)}>
               {busy ? "Guardando…" : "Crear plan"}
             </ITButton>
           </div>
@@ -318,12 +364,19 @@ export default function Plans() {
             onChange={(e) => setEditForm({ ...editForm, price: e.target.value })}
             required
           />
-          <ITAlert variant="info">Cambiar precio o tipo de cobro no altera los cobros ya registrados.</ITAlert>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <LimitFields
+              kitchens={editForm.maxKitchens}
+              waiters={editForm.maxWaiters}
+              onChange={(k, w) => setEditForm({ ...editForm, maxKitchens: k, maxWaiters: w })}
+            />
+          </div>
+          <ITAlert variant="info">Cambiar precio o tipo de cobro no altera los cobros ya registrados. Bajar los límites no revoca teléfonos ya activos.</ITAlert>
           <div className="flex justify-end gap-2">
             <ITButton type="button" variant="outlined" color="gray" onClick={() => setEditing(null)}>
               Cancelar
             </ITButton>
-            <ITButton type="submit" disabled={editBusy || editForm.name.trim().length < 2 || editForm.price === ""}>
+            <ITButton type="submit" disabled={editBusy || editForm.name.trim().length < 2 || editForm.price === "" || limitInvalid(editForm.maxKitchens) || limitInvalid(editForm.maxWaiters)}>
               {editBusy ? "Guardando…" : "Guardar cambios"}
             </ITButton>
           </div>

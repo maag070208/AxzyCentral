@@ -166,3 +166,15 @@ body {
   --viz-cash: #3987e5;
   --viz-transfer: #d95926;
 }
+
+/* Reporte mensual: hoja carta con márgenes; los colores de las gráficas se imprimen. */
+@media print {
+  @page {
+    size: letter;
+    margin: 14mm;
+  }
+  .axc-report {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

@@ -34,6 +34,7 @@ import {
   money,
   paymentConcept,
   periodText,
+  planLimits,
   planPrice,
   setDeviceActive,
   today,
@@ -57,6 +58,7 @@ import {
 } from "../shared";
 import { Card, Empty, IconAction, Initials, Page, TableWrap, Td, Th } from "../ui";
 import ClientUsersCard from "../components/ClientUsersCard";
+import AppErrorsCard from "../components/AppErrorsCard";
 import QrActivationDialog from "../components/QrActivationDialog";
 import QuickPayDialog from "../components/QuickPayDialog";
 
@@ -221,6 +223,7 @@ export default function ClientDetail() {
               onAdd={() => setAddOpen(true)}
             />
             <DevicesCard client={client} run={run} onNewQr={openNewQr} onRotateQr={openDeviceQr} />
+            <AppErrorsCard clientId={client.id} />
             <ClientUsersCard client={client} />
           </div>
 
@@ -727,7 +730,11 @@ function DevicesCard({
   return (
     <Card
       title="Licencias"
-      subtitle="Cada tablet se activa una vez escaneando un QR."
+      subtitle={
+        client.plan
+          ? `${client.devices.filter((d) => d.active).length}${client.plan.maxKitchens != null ? ` de ${client.plan.maxKitchens}` : ""} activas · el plan incluye ${planLimits(client.plan)}`
+          : "Cada tablet se activa una vez escaneando un QR."
+      }
       actions={
         <ITButton size="sm" variant="outlined" icon={<LuQrCode size={14} />} onClick={onNewQr}>
           Nuevo QR

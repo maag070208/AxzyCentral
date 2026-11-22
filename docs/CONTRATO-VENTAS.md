@@ -87,3 +87,69 @@ Lo usa Inicio en la tarjeta "Ventas de tus clientes" y en el aviso "Sin reportar
 - Sube solo las nuevas y recuerda cuántas lleva.
 - Si falla, reintenta a los 10 minutos.
 - Sin internet no afecta nada de la operación.
+
+## 6. Respaldo de la cocina: `PUT /api/v1/backup` y `GET /api/v1/backup` (app)
+
+El teléfono de cocina es la única copia de las cuentas abiertas y del menú. Para que no se pierdan si el teléfono se rompe, la app (Tacomanda ≥ 1.2.0) sube su estado completo.
+
+- **Autenticación:** el código del dispositivo como `Authorization: Bearer axc_…`, igual que `/sales`. Un dispositivo revocado recibe `401`.
+- **`PUT /backup`:**
+  - Cuerpo: `{ "appVersion": "1.2.0 (5)", "savedAt": "2026-11-22T10:00:00-06:00", "state": { …AppState… } }`, de máximo 2 MB. Si pasa, responde `413 PAYLOAD_TOO_LARGE`.
+  - Se guarda **uno por cliente** (tabla `backups`) y cada envío lo reemplaza.
+  - Si llega uno con `savedAt` más viejo que el guardado, se ignora y responde `{ "saved": false }`. Así un teléfono viejo no pisa al nuevo.
+  - La app revisa cada minuto y solo sube si el estado cambió. Tras un error espera 5 minutos.
+- **`GET /backup`:**
+  - Cualquier dispositivo activo del mismo cliente descarga `{ savedAt, deviceName, fromThisDevice, appVersion, state }`.
+  - Si no hay respaldo, responde `404 NO_BACKUP`.
+- **En la app:**
+  - Admin → "Respaldo en la Central" muestra qué trae el respaldo y qué tiene el teléfono.
+  - "Recuperar" reemplaza el estado y aparta lo anterior en `taqueria.json.antes-de-respaldo-<hora>`.
+  - Las cuentas cerradas no van aquí: ya están en `/sales`.
+
+## 7. Límites del plan, aviso de actualización y fallas
+
+### Límites del plan
+
+- `plans.maxKitchens` y `plans.maxWaiters` dicen cuántos incluye el plan. `null` es ilimitado, y un cliente sin plan también es ilimitado.
+- **Cocinas (lo hace cumplir la Central):**
+  - Si el cliente ya tiene `maxKitchens` dispositivos activos, crear otro dispositivo, reactivarlo o darle un código nuevo a uno revocado responde `409 PLAN_LIMIT`.
+  - Bajar de plan no revoca teléfonos que ya estaban activos.
+- **Meseras (lo hace cumplir la cocina):**
+  - `GET /license` y `POST /activate` traen `limits: { kitchens, waiters }`.
+  - Al conectarse, la mesera manda `hello` con un id fijo de su teléfono.
+  - La cocina rechaza a la que excede `waiters` con un mensaje claro y suelta la conexión vieja del mismo teléfono.
+  - Una app de mesera sin `hello` no se atiende si el plan tiene límite.
+
+### Aviso de actualización
+
+- **Consola:** en Productos, "Publicar versión" guarda `latestVersionCode`, `latestVersionName`, `latestUrl` y `latestNotes`.
+- **Licencia:** `GET /license` trae `latestApp: { versionCode, versionName, url, notes }`, o `null`.
+- **App:**
+  - La cocina muestra el aviso si su `versionCode` es menor; al tocarlo abre el enlace.
+  - Se lo pasa a las meseras en cada estado (`ServerMsg.State.latestApp`).
+
+### Fallas
+
+- **`POST /api/v1/app-errors`** (código del dispositivo como Bearer):
+  - Cuerpo: `{ errors: [{ id, source: "cocina"|"mesero", appVersion, model, occurredAt, message, stack }] }`, máximo 20.
+  - No duplica por `(dispositivo, id)`.
+- **App:**
+  - Guarda cada cierre inesperado en `files/fallas/`.
+  - La mesera se los manda a la cocina al conectar (`appErrors`).
+  - La cocina sube todo cada 5 minutos.
+- **Consola:**
+  - `GET /clients/:id/app-errors` alimenta la tarjeta "Fallas de la app" del detalle del cliente.
+  - `GET /app-errors/recent?days=7` alimenta el aviso "La app se cerró sola" en Inicio.
+
+## 8. Reporte mensual (consola)
+
+`/#/reporte?cliente=…&mes=AAAA-MM` es una hoja carta para mandarle al cliente. Por defecto es el mes pasado y se abre desde Métricas con "Reporte mensual para el cliente".
+- **Contenido:**
+  - Indicadores contra el mes anterior completo.
+  - "Lo que dicen los números".
+  - Ventas por día, hora pico y día de la semana.
+  - Productos más vendidos, cómo pagan, cocina y categorías.
+- **Formato:**
+  - Siempre en claro.
+  - "Imprimir o guardar PDF" usa la impresión del navegador.
+  - Los controles no salen en la hoja.
