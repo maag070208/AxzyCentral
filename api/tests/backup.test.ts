@@ -81,16 +81,26 @@ test("guarda el respaldo y otro teléfono del cliente lo recupera", async () => 
   const other = (await call("POST", `/clients/${clientId}/devices`, { body: { name: "Teléfono nuevo" } })).body.code;
   const got = await call("GET", "/backup", { auth: other });
   assert.equal(got.status, 200);
-  assert.equal(got.body.deviceName, "Tablet cocina");
-  assert.equal(got.body.fromThisDevice, false);
-  assert.equal(got.body.state.orders.length, 2);
-  assert.equal(got.body.savedAt, "2026-11-22T16:00:00.000Z");
+  const [b] = got.body.backups;
+  assert.equal(b.deviceName, "Tablet cocina");
+  assert.equal(b.fromThisDevice, false);
+  assert.equal(b.state.orders.length, 2);
+  assert.equal(b.savedAt, "2026-11-22T16:00:00.000Z");
+
+  // Otra cocina independiente del mismo cliente guarda el suyo sin pisar el primero.
+  await call("PUT", "/backup", { body: { savedAt: "2026-11-22T10:30:00-06:00", state: state(5) }, auth: other });
+  const both = (await call("GET", "/backup", { auth: code })).body.backups;
+  assert.deepEqual(both.map((x: { deviceName: string; state: { orders: unknown[] } }) => [x.deviceName, x.state.orders.length]), [
+    ["Teléfono nuevo", 5],
+    ["Tablet cocina", 2],
+  ]);
 });
 
 test("uno más viejo no pisa al guardado", async () => {
   const old = await call("PUT", "/backup", { body: { savedAt: "2026-11-22T09:00:00-06:00", state: state(0) }, auth: code });
   assert.equal(old.body.saved, false);
-  assert.equal((await call("GET", "/backup", { auth: code })).body.state.orders.length, 2);
+  const mine = (await call("GET", "/backup", { auth: code })).body.backups.find((x: { fromThisDevice: boolean }) => x.fromThisDevice);
+  assert.equal(mine.state.orders.length, 2);
 });
 
 test("acepta respaldos de más de 100 kB y rechaza los gigantes", async () => {

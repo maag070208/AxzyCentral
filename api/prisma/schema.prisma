@@ -93,7 +93,7 @@ model Client {
   devices     Device[]
   users       ClientUser[]
   sales       Sale[]
-  backup      Backup?
+  backups     Backup[]
   appErrors   AppError[]
 
   @@index([planId])
@@ -155,7 +155,7 @@ model Device {
   appVersion  String?
   createdAt   DateTime  @default(now())
   sales       Sale[]
-  backups     Backup[]
+  backup      Backup?
   appErrors   AppError[]
 
   @@index([clientId])
@@ -263,14 +263,14 @@ model SaleLine {
   @@map("sale_lines")
 }
 
-/// Último respaldo del teléfono de cocina de un cliente: su estado completo
+/// Último respaldo de cada teléfono de cocina principal: su estado completo
 /// (menú, cuentas abiertas y órdenes) para recuperarlo si el teléfono se pierde.
-/// Uno por cliente; cada envío lo reemplaza.
+/// Uno por dispositivo (varias cocinas independientes no se pisan); cada envío lo reemplaza.
 model Backup {
-  clientId   String   @id
-  client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  deviceId   String
+  deviceId   String   @id
   device     Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  clientId   String
+  client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   /// Cuándo se tomó en el teléfono.
   savedAt    DateTime
   appVersion String?
@@ -278,6 +278,7 @@ model Backup {
   sizeBytes  Int
   receivedAt DateTime @default(now()) @updatedAt
 
+  @@index([clientId])
   @@map("backups")
 }
 

@@ -1,10 +1,10 @@
 /**
  * Respaldo del teléfono de cocina (público, con el código del dispositivo como Bearer).
  *
- * - `PUT /backup`: la app sube su estado completo (menú, cuentas abiertas y
- *   órdenes). Se guarda uno por cliente; uno más viejo que el guardado se ignora.
- * - `GET /backup`: cualquier dispositivo activo del mismo cliente lo descarga
- *   para recuperar el día en un teléfono nuevo.
+ * - `PUT /backup`: la cocina sube su estado completo (menú, cuentas abiertas y
+ *   órdenes). Se guarda uno por dispositivo; uno más viejo que el guardado se ignora.
+ * - `GET /backup`: cualquier dispositivo activo del mismo cliente lista los
+ *   respaldos de sus cocinas (el más reciente primero) para recuperar uno.
  */
 import { Router } from "express";
 import rateLimit from "express-rate-limit";
@@ -41,19 +41,18 @@ backupRouter.put(
     const { appVersion, savedAt, state } = Upload.parse(req.body);
     const at = new Date(savedAt);
     const data = {
-      deviceId: device.id,
       savedAt: at,
       appVersion: appVersion ?? null,
       state: state as Prisma.InputJsonObject,
       sizeBytes: Buffer.byteLength(JSON.stringify(state)),
     };
-    const current = await db.backup.findUnique({ where: { clientId: device.clientId }, select: { savedAt: true } });
+    const current = await db.backup.findUnique({ where: { deviceId: device.id }, select: { savedAt: true } });
     // Un teléfono viejo con reloj o datos atrasados no pisa uno más nuevo.
     const kept = current !== null && current.savedAt > at;
     if (!kept) {
       await db.backup.upsert({
-        where: { clientId: device.clientId },
-        create: { ...data, clientId: device.clientId },
+        where: { deviceId: device.id },
+        create: { ...data, deviceId: device.id, clientId: device.clientId },
         update: data,
       });
     }
@@ -66,17 +65,22 @@ backupRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const device = await deviceOf(req.headers.authorization);
-    const backup = await db.backup.findUnique({
+    const backups = await db.backup.findMany({
+      // También los de teléfonos revocados: el perdido es justo el que se quiere recuperar.
       where: { clientId: device.clientId },
+      orderBy: { savedAt: "desc" },
       include: { device: { select: { name: true } } },
     });
-    if (!backup) throw new HttpError(404, "NO_BACKUP", "Esta taquería todavía no tiene respaldo");
+    if (backups.length === 0) throw new HttpError(404, "NO_BACKUP", "Esta taquería todavía no tiene respaldo");
     res.set("Cache-Control", "no-store").json({
-      savedAt: backup.savedAt.toISOString(),
-      deviceName: backup.device.name,
-      fromThisDevice: backup.deviceId === device.id,
-      appVersion: backup.appVersion,
-      state: backup.state,
+      backups: backups.map((b) => ({
+        deviceId: b.deviceId,
+        deviceName: b.device.name,
+        fromThisDevice: b.deviceId === device.id,
+        savedAt: b.savedAt.toISOString(),
+        appVersion: b.appVersion,
+        state: b.state,
+      })),
     });
   })
 );

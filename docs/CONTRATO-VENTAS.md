@@ -95,11 +95,12 @@ El teléfono de cocina es la única copia de las cuentas abiertas y del menú. P
 - **Autenticación:** el código del dispositivo como `Authorization: Bearer axc_…`, igual que `/sales`. Un dispositivo revocado recibe `401`.
 - **`PUT /backup`:**
   - Cuerpo: `{ "appVersion": "1.2.0 (5)", "savedAt": "2026-11-22T10:00:00-06:00", "state": { …AppState… } }`, de máximo 2 MB. Si pasa, responde `413 PAYLOAD_TOO_LARGE`.
-  - Se guarda **uno por cliente** (tabla `backups`) y cada envío lo reemplaza.
+  - Se guarda **uno por dispositivo** (tabla `backups`, llave `deviceId`) y cada envío lo reemplaza. Así, varias cocinas independientes del mismo cliente no se pisan.
   - Si llega uno con `savedAt` más viejo que el guardado, se ignora y responde `{ "saved": false }`. Así un teléfono viejo no pisa al nuevo.
   - La app revisa cada minuto y solo sube si el estado cambió. Tras un error espera 5 minutos.
 - **`GET /backup`:**
-  - Cualquier dispositivo activo del mismo cliente descarga `{ savedAt, deviceName, fromThisDevice, appVersion, state }`.
+  - Cualquier dispositivo activo del mismo cliente descarga `{ backups: [{ deviceId, deviceName, fromThisDevice, savedAt, appVersion, state }] }`, del más reciente al más viejo.
+  - Incluye los de teléfonos revocados, porque el perdido es justo el que se quiere recuperar.
   - Si no hay respaldo, responde `404 NO_BACKUP`.
 - **En la app:**
   - Admin → "Respaldo en la Central" muestra qué trae el respaldo y qué tiene el teléfono.
@@ -114,6 +115,9 @@ El teléfono de cocina es la única copia de las cuentas abiertas y del menú. P
 - **Cocinas (lo hace cumplir la Central):**
   - Si el cliente ya tiene `maxKitchens` dispositivos activos, crear otro dispositivo, reactivarlo o darle un código nuevo a uno revocado responde `409 PLAN_LIMIT`.
   - Bajar de plan no revoca teléfonos que ya estaban activos.
+- **Pantallas de cocina extra (lo hace cumplir la cocina principal):**
+  - Se conectan a la principal como las meseras, con `hello.screen = true`.
+  - Se aceptan hasta `kitchens - 1` a la vez, y no pueden cambiar nada.
 - **Meseras (lo hace cumplir la cocina):**
   - `GET /license` y `POST /activate` traen `limits: { kitchens, waiters }`.
   - Al conectarse, la mesera manda `hello` con un id fijo de su teléfono.
