@@ -9,7 +9,7 @@ import { z } from "zod";
 import { db } from "../db";
 import { asyncHandler, HttpError } from "../errors";
 import { requireApp, signAppToken } from "../auth";
-import { licenseBody, nextDueDateOf, requireDeviceByCode } from "../lib/license";
+import { licenseBody, licenseExtrasOf, nextDueDateOf, requireDeviceByCode } from "../lib/license";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, hashPassword, verifyPassword } from "../lib/passwords";
 
 export const appRouter = Router();
@@ -56,7 +56,7 @@ const sessionBody = async (user: AppUser, client: AppClient, now: Date) => ({
   roles: rolesView(user),
   client: { id: client.id, name: client.name },
   product: { key: client.product.key, name: client.product.name },
-  license: licenseBody(client, await nextDueDateOf(client.id), now),
+  license: licenseBody(client, await nextDueDateOf(client.id), now, await licenseExtrasOf(client.id, client.product.iconSetId)),
 });
 
 const invalidCredentials = (): HttpError =>

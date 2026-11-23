@@ -125,6 +125,10 @@ test("set de iconos: subir el kit, reemplazarlo (agrega, cambia y quita) y bajar
 
   const lic = await call("GET", "/license", { auth: code });
   assert.deepEqual(lic.body.iconSet, { id: setId, version: v1 + 1 });
+  // La activación responde lo mismo: la app recién activada ya sabe qué iconos bajar.
+  const otro = (await call("POST", `/clients/${clientId}/devices`, { body: { name: "Barra 2" } })).body.code;
+  const act = await call("POST", "/activate", { auth: null, body: { code: otro, device: { name: "Barra 2", model: "Prueba" } } });
+  assert.deepEqual(act.body.iconSet, { id: setId, version: v1 + 1 });
 
   const dl = await call("GET", "/icon-set", { auth: code });
   assert.equal(dl.status, 200);

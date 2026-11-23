@@ -4,7 +4,7 @@ import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "../db";
 import { asyncHandler, HttpError } from "../errors";
-import { licenseBody, licensePayload, nextDueDateOf, requireDeviceByCode } from "../lib/license";
+import { licenseBody, licenseExtrasOf, licensePayload, nextDueDateOf, requireDeviceByCode } from "../lib/license";
 import { bearerOf } from "../lib/tokens";
 
 export const licenseRouter = Router();
@@ -72,12 +72,14 @@ activateRouter.post(
       model: device.model ?? input?.model ?? undefined,
       name: firstActivation && input?.name ? input.name.slice(0, 60) : undefined,
     };
-    const [updated, nextDueDate] = await Promise.all([
+    const [updated, nextDueDate, extras] = await Promise.all([
       db.device.update({ where: { id: device.id }, data, select: { id: true, name: true } }),
       nextDueDateOf(device.clientId),
+      licenseExtrasOf(device.clientId, device.client.product.iconSetId),
     ]);
+    // Igual que `GET /license`: la app recién activada ya sabe qué iconos bajar.
     res
       .set("Cache-Control", "no-store")
-      .json({ ...licenseBody(device.client, nextDueDate, now), device: { id: updated.id, name: updated.name } });
+      .json({ ...licenseBody(device.client, nextDueDate, now, extras), device: { id: updated.id, name: updated.name } });
   })
 );

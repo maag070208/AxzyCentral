@@ -114,12 +114,19 @@ export const nextDueDateOf = async (clientId: string): Promise<Date | null> => {
  * con `POST /activate` para no duplicar lógica (contrato §5.2).
  */
 export const licensePayload = async (device: LicenseDevice, now: Date, appVersion?: string): Promise<LicenseBody> => {
-  const setId = device.client.product.iconSetId;
-  const [nextDueDate, , iconSet, catalog] = await Promise.all([
+  const [nextDueDate, , extras] = await Promise.all([
     nextDueDateOf(device.clientId),
     db.device.update({ where: { id: device.id }, data: { lastSeenAt: now, appVersion } }),
-    setId ? db.iconSet.findUnique({ where: { id: setId }, select: { id: true, version: true } }) : null,
-    db.catalogVersion.findFirst({ where: { clientId: device.clientId }, orderBy: { version: "desc" }, select: { version: true } }),
+    licenseExtrasOf(device.clientId, device.client.product.iconSetId),
   ]);
-  return licenseBody(device.client, nextDueDate, now, { iconSet, catalogVersion: catalog?.version ?? null });
+  return licenseBody(device.client, nextDueDate, now, extras);
+};
+
+/** Set de iconos del giro y versión del menú del cliente: lo mismo en `/license`, `/activate` y `/app`. */
+export const licenseExtrasOf = async (clientId: string, iconSetId: string | null | undefined): Promise<LicenseExtras> => {
+  const [iconSet, catalog] = await Promise.all([
+    iconSetId ? db.iconSet.findUnique({ where: { id: iconSetId }, select: { id: true, version: true } }) : null,
+    db.catalogVersion.findFirst({ where: { clientId }, orderBy: { version: "desc" }, select: { version: true } }),
+  ]);
+  return { iconSet, catalogVersion: catalog?.version ?? null };
 };
