@@ -2,7 +2,8 @@
  * Menú de cada cliente, versionado (la versión más alta es la vigente).
  *
  * App (código del dispositivo como Bearer):
- * - `GET /catalog`: el menú vigente (404 `NO_CATALOG` si la Central todavía no tiene).
+ * - `GET /catalog`: el menú vigente (404 `NO_CATALOG` si la Central todavía no tiene). Lleva ETag
+ *   `"v<versión>"`: la cocina pregunta seguido y, si no cambió, recibe 304 sin el menú.
  * - `PUT /catalog` `{ baseVersion, data }`: el admin lo cambió en el teléfono. Si la Central
  *   ya va en otra versión responde 409 `CATALOG_CONFLICT` con la vigente. La primera vez
  *   (`baseVersion` 0 y sin menú) adopta el del teléfono: así la taquería que ya trabaja no pierde el suyo.
@@ -106,7 +107,13 @@ deviceCatalogRouter.get(
     const device = await deviceOf(req.headers.authorization);
     const current = await currentCatalog(device.clientId);
     if (!current) throw new HttpError(404, "NO_CATALOG", "La Central todavía no tiene el menú de esta taquería");
-    res.set("Cache-Control", "no-store").json(view(current));
+    const etag = `"v${current.version}"`;
+    res.set("ETag", etag).set("Cache-Control", "no-cache");
+    if (req.headers["if-none-match"] === etag) {
+      res.status(304).end();
+      return;
+    }
+    res.json(view(current));
   })
 );
 
@@ -133,7 +140,11 @@ const assertClient = async (id: string) => {
 clientCatalogRouter.get(
   "/:id/catalog",
   asyncHandler(async (req, res) => {
-    await assertClient(req.params.id);
+    const client = await db.client.findUnique({
+      where: { id: req.params.id },
+      select: { product: { select: { key: true, name: true, terms: true, features: true, iconSetId: true } } },
+    });
+    if (!client) throw new HttpError(404, "CLIENT_NOT_FOUND", "Cliente no encontrado");
     const [current, history] = await Promise.all([
       currentCatalog(req.params.id),
       db.catalogVersion.findMany({
@@ -144,6 +155,8 @@ clientCatalogRouter.get(
       }),
     ]);
     res.json({
+      // El giro del cliente: el editor ofrece los iconos de su set y oculta lo que el giro no usa.
+      giro: client.product,
       current: current ? view(current) : null,
       history: history.map((h) => ({ ...h, createdAt: h.createdAt.toISOString() })),
     });

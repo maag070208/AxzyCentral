@@ -523,3 +523,80 @@ export const uploadIconSet = (
 
 /** `src` de un PNG en base64. */
 export const pngSrc = (base64: string) => `data:image/png;base64,${base64}`;
+
+/* ---------------- Menú del cliente (catalog_versions) ---------------- */
+
+/** Presentación con precio propio (Normal, Empanizado, Chica…). */
+export interface MenuVariant {
+  name: string;
+  priceCents: number;
+}
+
+/** Producto tal como lo guarda la app (`Product` en Model.kt). */
+export interface MenuProduct {
+  id: string;
+  name: string;
+  priceCents: number;
+  category: string;
+  active?: boolean;
+  emoji?: string;
+  modifierGroupIds?: string[];
+  color?: string;
+  variants?: MenuVariant[];
+  mix?: boolean;
+  icon?: string | null;
+  [extra: string]: unknown;
+}
+
+export interface MenuCategory {
+  name: string;
+  singular?: string;
+  byAmount?: boolean;
+  freeExtras?: boolean;
+  [extra: string]: unknown;
+}
+
+export interface MenuModifierGroup {
+  id: string;
+  name: string;
+  options: string[];
+  exclusive?: boolean;
+  [extra: string]: unknown;
+}
+
+export interface MenuData {
+  categories: MenuCategory[];
+  products: MenuProduct[];
+  modifierGroups: MenuModifierGroup[];
+  freeExtras: string[];
+  stations: unknown[];
+  [extra: string]: unknown;
+}
+
+export interface MenuVersion {
+  version: number;
+  source: "central" | "cocina" | string;
+  author: string;
+  updatedAt: string;
+  data: MenuData;
+}
+
+export interface MenuHistoryItem {
+  version: number;
+  source: string;
+  author: string;
+  createdAt: string;
+  sizeBytes: number;
+}
+
+export interface ClientMenu {
+  giro: { key: string; name: string; features: GiroFeatures; iconSetId: string | null };
+  current: MenuVersion | null;
+  history: MenuHistoryItem[];
+}
+
+export const getClientMenu = (clientId: string) => api<ClientMenu>("GET", `/clients/${clientId}/catalog`);
+export const getClientMenuVersion = (clientId: string, version: number) =>
+  api<MenuVersion>("GET", `/clients/${clientId}/catalog/${version}`);
+export const saveClientMenu = (clientId: string, baseVersion: number, data: MenuData) =>
+  api<{ saved: boolean; catalog: MenuVersion }>("PUT", `/clients/${clientId}/catalog`, { baseVersion, data });

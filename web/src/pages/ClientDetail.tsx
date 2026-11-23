@@ -22,6 +22,7 @@ import {
   LuRefreshCw,
   LuRotateCcw,
   LuShieldOff,
+  LuUtensils,
   LuWallet,
   LuX,
 } from "react-icons/lu";
@@ -196,6 +197,9 @@ export default function ClientDetail() {
             </ITButton>
             <ITButton variant="outlined" icon={<LuQrCode size={15} />} onClick={openNewQr}>
               Generar QR
+            </ITButton>
+            <ITButton variant="outlined" icon={<LuUtensils size={15} />} onClick={() => navigate(`/clientes/${client.id}/menu`)}>
+              Menú
             </ITButton>
             <ITButton variant="outlined" icon={<LuPencil size={15} />} onClick={() => setEditOpen(true)}>
               Editar

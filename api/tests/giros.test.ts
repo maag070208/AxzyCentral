@@ -171,8 +171,13 @@ test("menú: la cocina adopta el suyo la primera vez, luego conflicto si la Cent
 
   const got = await call("GET", "/catalog", { auth: code });
   assert.equal(got.body.version, 2);
+  assert.equal(got.headers.get("etag"), '"v2"');
+  // La cocina pregunta seguido: sin cambios, 304 sin el menú.
+  assert.equal((await call("GET", "/catalog", { auth: code, headers: { "If-None-Match": '"v2"' } })).status, 304);
+  assert.equal((await call("GET", "/catalog", { auth: code, headers: { "If-None-Match": '"v1"' } })).status, 200);
 
   const hist = await call("GET", `/clients/${clientId}/catalog`);
+  assert.equal(hist.body.giro.key, "TAQUERIA");
   assert.deepEqual(hist.body.history.map((h: { version: number; source: string }) => [h.version, h.source]), [[2, "central"], [1, "cocina"]]);
   assert.equal((await call("GET", `/clients/${clientId}/catalog/1`)).body.data.products[0].priceCents, 3500);
 
