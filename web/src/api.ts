@@ -21,6 +21,66 @@ export interface Product {
   plans?: number;
   /** Última versión publicada de la app; la app avisa si la suya es menor. */
   latestApp?: LatestApp | null;
+  /** Palabras del giro (Taquero/Sushero…); lo que falte, la app lo toma de la taquería. */
+  terms?: GiroTerms;
+  /** Partes del modelo que usa el giro. */
+  features?: GiroFeatures;
+  /** Set de iconos asignado (resumen). */
+  iconSet?: { id: string; name: string; version: number; icons: number } | null;
+  /** Menú base para clientes nuevos (conteos). */
+  template?: { categories: number; products: number } | null;
+}
+
+export interface GiroTerms {
+  kitchenRole?: string;
+  waiterRole?: string;
+  item?: string;
+  kitchen?: string;
+}
+
+export interface GiroFeatures {
+  mixes?: boolean;
+  meatColors?: boolean;
+  freeExtras?: boolean;
+}
+
+/** Set de iconos en la lista (`GET /icon-sets`). */
+export interface IconSetSummary {
+  id: string;
+  name: string;
+  version: number;
+  hasLogo: boolean;
+  hasAppIcon: boolean;
+  icons: number;
+  products: number;
+  updatedAt: string;
+}
+
+export interface IconItem {
+  key: string;
+  group: string;
+  label: string;
+  /** PNG en base64. */
+  png: string;
+}
+
+/** Set completo (`GET /icon-sets/:id`). */
+export interface IconSetFull {
+  id: string;
+  name: string;
+  version: number;
+  logo: string | null;
+  appIcon: string | null;
+  icons: IconItem[];
+}
+
+/** Resultado de subir un kit (`PUT /icon-sets/:id/icons`). */
+export interface IconUploadResult {
+  version: number;
+  added: string[];
+  changed: string[];
+  removed: string[];
+  logoChanged: boolean;
 }
 
 export interface LatestApp {
@@ -445,3 +505,21 @@ export const planLimits = (p: Pick<Plan, "maxKitchens" | "maxWaiters">) => {
   const w = p.maxWaiters == null ? "meseras ilimitadas" : `${p.maxWaiters} ${p.maxWaiters === 1 ? "mesera" : "meseras"}`;
   return `${k} · ${w}`;
 };
+
+/* ------------------------------------------------------------------ */
+/* Giros: sets de iconos                                               */
+/* ------------------------------------------------------------------ */
+
+export const listIconSets = () => api<IconSetSummary[]>("GET", "/icon-sets");
+export const createIconSet = (name: string) => api<IconSetSummary>("POST", "/icon-sets", { name });
+export const getIconSet = (id: string, previewCount?: number) =>
+  api<IconSetFull>("GET", `/icon-sets/${id}${previewCount ? `?icons=${previewCount}` : ""}`);
+export const renameIconSet = (id: string, name: string) => api<IconSetSummary>("PATCH", `/icon-sets/${id}`, { name });
+export const deleteIconSet = (id: string) => api<void>("DELETE", `/icon-sets/${id}`);
+export const uploadIconSet = (
+  id: string,
+  kit: { icons: { key: string; png: string }[]; logo?: string | null; appIcon?: string | null }
+) => api<IconUploadResult>("PUT", `/icon-sets/${id}/icons`, kit);
+
+/** `src` de un PNG en base64. */
+export const pngSrc = (base64: string) => `data:image/png;base64,${base64}`;

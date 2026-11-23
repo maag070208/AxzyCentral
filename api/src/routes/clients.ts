@@ -190,6 +190,19 @@ clientsRouter.post(
     if (!product.active) throw new HttpError(409, "PRODUCT_INACTIVE", "Ese producto está dado de baja");
     await assertAssignable(input.productId, input.planId);
     const t = await db.client.create({ data: { ...input, planId: input.planId ?? null }, include });
+    // Cliente nuevo de un giro con menú base: arranca con una copia (versión 1).
+    if (product.template) {
+      await db.catalogVersion.create({
+        data: {
+          clientId: t.id,
+          version: 1,
+          data: product.template as Prisma.InputJsonObject,
+          source: "central",
+          author: "plantilla",
+          sizeBytes: Buffer.byteLength(JSON.stringify(product.template)),
+        },
+      });
+    }
     res.status(201).json(detail(t));
   })
 );

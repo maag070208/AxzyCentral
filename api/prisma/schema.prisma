@@ -33,6 +33,15 @@ model Product {
   /// Enlace de descarga del APK (p. ej. la carpeta de Drive).
   latestUrl         String?
   latestNotes       String?
+  /// Palabras del giro: `{ kitchenRole: "Sushero", waiterRole: "Mesero", item: "Rollo", kitchen: "Barra" }`.
+  terms       Json     @default("{}")
+  /// Partes del modelo que usa el giro: `{ mixes, meatColors, freeExtras }` (true/false).
+  features    Json     @default("{}")
+  /// Set de iconos del giro; la app lo baja al activarse.
+  iconSetId   String?
+  iconSet     IconSet? @relation(fields: [iconSetId], references: [id], onDelete: SetNull)
+  /// Menú base que se copia a cada cliente nuevo del giro (mismo formato que `CatalogVersion.data`).
+  template    Json?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   plans       Plan[]
@@ -40,6 +49,40 @@ model Product {
   roles       Role[]
 
   @@map("products")
+}
+
+/// Set de iconos de un giro (p. ej. "Tacos", "Makis", "Pizzería"). Se sube como zip desde la
+/// consola; cada cambio sube `version` y las apps lo vuelven a bajar.
+model IconSet {
+  id         String    @id @default(uuid())
+  name       String    @unique
+  version    Int       @default(1)
+  /// Logo del giro y su ícono de app (PNG); opcionales.
+  logoPng    Bytes?
+  appIconPng Bytes?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  icons      Icon[]
+  products   Product[]
+
+  @@map("icon_sets")
+}
+
+/// Un icono del set: la llave es el nombre del archivo (`rollo_dragon`) y el grupo sale de su prefijo.
+model Icon {
+  id    String  @id @default(uuid())
+  setId String
+  set   IconSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  key   String
+  group String
+  label String
+  /// PNG de 256 px.
+  png   Bytes
+  /// sha256 del PNG, para saber qué cambió al subir otra versión.
+  sha   String
+
+  @@unique([setId, key])
+  @@map("icons")
 }
 
 /// Cómo se cobra un plan: cada mes (RECURRING) o una sola vez (ONE_TIME).
@@ -95,6 +138,7 @@ model Client {
   sales       Sale[]
   backups     Backup[]
   appErrors   AppError[]
+  catalogs    CatalogVersion[]
 
   @@index([planId])
   @@index([productId])
@@ -304,4 +348,24 @@ model AppError {
   @@unique([deviceId, externalId])
   @@index([clientId, occurredAt])
   @@map("app_errors")
+}
+
+/// Menú de un cliente, versionado: la más alta es la vigente y las demás son su historial.
+/// Lo cambian la consola (`central`) o el admin desde el teléfono de cocina (`cocina`).
+model CatalogVersion {
+  id        String   @id @default(uuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  version   Int
+  /// Categorías, productos, opciones, extras y estaciones (el menú de la app).
+  data      Json
+  /// "central" o "cocina".
+  source    String
+  /// Quién lo cambió: el admin de la consola o el nombre del teléfono.
+  author    String
+  sizeBytes Int
+  createdAt DateTime @default(now())
+
+  @@unique([clientId, version])
+  @@map("catalog_versions")
 }

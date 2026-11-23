@@ -100,7 +100,8 @@ test("cliente de punta a punta", async () => {
   assert.equal(active.body.status, "ACTIVE");
   assert.equal(active.body.tenant.name, "Tacos El Güero");
   assert.equal(active.body.plan.name, "Básico");
-  assert.deepEqual(active.body.product, { key: "TAQUERIA", name: "Taquería" });
+  // Lo que lee la 1.2.x no cambia; terms/features son agregados.
+  assert.deepEqual({ key: active.body.product.key, name: active.body.product.name }, { key: "TAQUERIA", name: "Taquería" });
   assert.equal(active.body.nextDueDate, null);
   assert.ok(Date.parse(active.body.validUntil) > Date.parse(active.body.serverTime));
 
@@ -211,7 +212,8 @@ test("POST /activate: da de alta, adopta nombre/modelo y responde como /license"
   assert.equal(ok.body.status, "ACTIVE");
   assert.equal(ok.body.tenant.name, "Taquería QR");
   assert.equal(ok.body.plan.name, "Básico QR");
-  assert.deepEqual(ok.body.product, { key: "TAQUERIA", name: "Taquería" });
+  // Lo que lee la 1.2.x no cambia; terms/features son agregados.
+  assert.deepEqual({ key: ok.body.product.key, name: ok.body.product.name }, { key: "TAQUERIA", name: "Taquería" });
   assert.equal(ok.body.nextDueDate, null);
   assert.ok(Date.parse(ok.body.validUntil) > Date.parse(ok.body.serverTime));
   assert.equal(ok.body.device.id, device.body.device.id);
