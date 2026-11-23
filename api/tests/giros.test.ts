@@ -197,3 +197,31 @@ test("giro con menú base: el cliente nuevo arranca con una copia", async () => 
   assert.equal(cat.body.current.author, "plantilla");
   assert.equal((await call("PATCH", `/products/${productId}`, { body: { terms: { otra: "x" } } })).status, 400);
 });
+
+test("plantillas de menú: el giro toma la de Pizzería y el cliente nuevo arranca con pizzas", async () => {
+  const list = await call("GET", "/menu-templates");
+  assert.deepEqual(list.body.map((t: { key: string }) => t.key), ["taqueria", "sushi", "pizzeria"]);
+  assert.equal((await call("GET", "/menu-templates/birria")).status, 404);
+  assert.equal((await call("GET", "/menu-templates", { auth: null })).status, 401);
+
+  const pizzeria = (await call("GET", "/menu-templates/pizzeria")).body;
+  const created = (await call("POST", "/products", { body: { key: "PIZZERIA_T", name: "Pizzería" } })).body;
+  // Un giro nuevo no hereda mixtos ni color de carne de la taquería.
+  assert.deepEqual(created.features, { mixes: false, meatColors: false, freeExtras: true });
+  const giro = created.id;
+  assert.equal((await call("PATCH", `/products/${giro}`, { body: { template: pizzeria.data } })).status, 200);
+  const luigi = (await call("POST", "/clients", { body: { productId: giro, name: "Pizzas Don Luigi" } })).body.id;
+  const cat = await call("GET", `/clients/${luigi}/catalog`);
+  assert.equal(cat.body.giro.hasTemplate, true);
+  assert.equal(cat.body.giro.id, giro);
+  const mediana = cat.body.current.data.products.find((p: { name: string }) => p.name === "Pepperoni").variants[1];
+  assert.deepEqual(mediana, { name: "Mediana", priceCents: 17900 });
+
+  // La consola copia otra plantilla al menú del cliente: es una versión nueva desde la Central.
+  const sushi = (await call("GET", "/menu-templates/sushi")).body.data;
+  const saved = await call("PUT", `/clients/${luigi}/catalog`, { body: { baseVersion: 1, data: sushi } });
+  assert.equal(saved.body.catalog.version, 2);
+  await db.$executeRawUnsafe(`DELETE FROM "catalog_versions" WHERE "clientId" = '${luigi}'`);
+  await db.$executeRawUnsafe(`DELETE FROM "clients" WHERE "id" = '${luigi}'`);
+  await db.$executeRawUnsafe(`DELETE FROM "products" WHERE "id" = '${giro}'`);
+});

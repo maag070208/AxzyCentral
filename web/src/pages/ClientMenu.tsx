@@ -1,19 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ITBadget, ITButton, ITCheckbox, ITDialog, ITInput } from "@axzydev/axzy_ui_system";
-import { LuHistory, LuPlus, LuSend, LuTrash2, LuX } from "react-icons/lu";
+import { LuCopy, LuHistory, LuPlus, LuSend, LuTrash2, LuX } from "react-icons/lu";
 import {
   ApiError,
   agoText,
   getClientMenu,
   getClientMenuVersion,
+  getGiroTemplate,
   getIconSet,
+  getMenuTemplate,
+  listMenuTemplates,
   money,
   pngSrc,
   saveClientMenu,
   type ClientMenu as Menu,
   type IconItem,
   type MenuData,
+  type MenuTemplateSummary,
   type MenuProduct,
   type MenuVersion,
 } from "../api";
@@ -40,6 +44,7 @@ export default function ClientMenu() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [conflict, setConflict] = useState(false);
+  const [templateOpen, setTemplateOpen] = useState(false);
 
   const load = useCallback(async () => {
     setError("");
@@ -118,6 +123,9 @@ export default function ClientMenu() {
       actions={
         base && (
           <div className="flex flex-wrap items-center gap-2">
+            <ITButton variant="outlined" icon={<LuCopy size={15} />} onClick={() => setTemplateOpen(true)}>
+              Copiar de la plantilla
+            </ITButton>
             <ITButton variant="outlined" icon={<LuHistory size={15} />} onClick={() => setHistoryOpen(true)}>
               Historial
             </ITButton>
@@ -132,7 +140,12 @@ export default function ClientMenu() {
         <Card>
           <Empty
             title="La cocina todavía no ha subido su menú"
-            description="Llega solo en cuanto el teléfono de cocina con la app nueva se conecte a internet. Desde ahí se edita aquí."
+            description="Llega solo en cuanto el teléfono de cocina con la app nueva se conecte a internet. Si el local es nuevo, puedes empezar con una plantilla."
+            action={
+              <ITButton icon={<LuCopy size={15} />} onClick={() => setTemplateOpen(true)}>
+                Empezar con una plantilla
+              </ITButton>
+            }
           />
         </Card>
       )}
@@ -229,6 +242,33 @@ export default function ClientMenu() {
           onSave={saveProduct}
           onRemove={removeProduct}
           onClose={() => setEditing(null)}
+        />
+      )}
+
+      {templateOpen && menu && (
+        <TemplateDialog
+          menu={menu}
+          onUse={async (name, data) => {
+            setTemplateOpen(false);
+            if (base) {
+              // Con menú vigente queda en el borrador: el admin lo revisa y lo envía.
+              setDraft(structuredClone(data));
+              setCategory(null);
+              notify(`${name} cargado en el borrador; revísalo y envíalo a cocina`);
+              return;
+            }
+            try {
+              const r = await saveClientMenu(id, 0, data);
+              notify(`Menú ${name} enviado a cocina como versión ${r.catalog.version}`);
+              await load();
+            } catch (e) {
+              if (e instanceof ApiError && e.code === "CATALOG_CONFLICT") {
+                notify("La cocina acaba de subir su menú; se cargó para que lo revises", "error");
+                await load();
+              } else notify(errorOf(e), "error");
+            }
+          }}
+          onClose={() => setTemplateOpen(false)}
         />
       )}
 
@@ -551,6 +591,78 @@ function HistoryDialog({
             )}
           </li>
         ))}
+      </ul>
+    </ITDialog>
+  );
+}
+
+/**
+ * "Copiar de la plantilla": el menú base del giro o una de las plantillas de la Central.
+ * Reemplaza todo el menú (productos, opciones y extras); los agotados de la cocina se conservan por producto.
+ */
+function TemplateDialog({
+  menu,
+  onUse,
+  onClose,
+}: {
+  menu: Menu;
+  onUse: (name: string, data: MenuData) => void;
+  onClose: () => void;
+}) {
+  const notify = useNotify();
+  const [templates, setTemplates] = useState<MenuTemplateSummary[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  useEffect(() => {
+    listMenuTemplates()
+      .then(setTemplates)
+      .catch((e) => notify(errorOf(e), "error"));
+  }, [notify]);
+
+  const pick = async (key: string, name: string, load: () => Promise<MenuData | null>) => {
+    setBusy(key);
+    try {
+      const data = await load();
+      if (data) onUse(name, data);
+      else notify("El giro ya no tiene menú base", "error");
+    } catch (e) {
+      notify(errorOf(e), "error");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const options = [
+    ...(menu.giro.hasTemplate
+      ? [{ key: "giro", name: `Menú base de ${menu.giro.name}`, detail: "El que recibe cada cliente nuevo del giro", load: async () => (await getGiroTemplate(menu.giro.id)).template }]
+      : []),
+    ...(templates ?? []).map((t) => ({
+      key: t.key,
+      name: `Plantilla ${t.name}`,
+      detail: `${t.categories} categorías · ${t.products} productos`,
+      load: async () => (await getMenuTemplate(t.key)).data,
+    })),
+  ];
+
+  return (
+    <ITDialog isOpen onClose={onClose} title="Copiar de la plantilla" className="w-[min(94vw,520px)]">
+      <Muted className="mb-3 block">
+        {menu.current
+          ? "Reemplaza todo el menú en el borrador. No llega a la cocina hasta que lo envíes."
+          : "La cocina recibe este menú en cuanto se conecte."}
+      </Muted>
+      <ul className="flex flex-col divide-y divide-slate-100 dark:divide-slate-800">
+        {options.map((o) => (
+          <li key={o.key} className="flex items-center gap-3 py-2.5">
+            <span className="min-w-0 flex-1 text-sm">
+              <span className="block font-medium text-slate-900 dark:text-white">{o.name}</span>
+              <Muted>{o.detail}</Muted>
+            </span>
+            <ITButton size="sm" variant="outlined" disabled={busy !== null} onClick={() => void pick(o.key, o.name, o.load)}>
+              {busy === o.key ? "Cargando…" : "Usar"}
+            </ITButton>
+          </li>
+        ))}
+        {templates === null && <li className="py-4 text-center text-sm text-slate-500">Cargando plantillas…</li>}
       </ul>
     </ITDialog>
   );

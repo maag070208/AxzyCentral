@@ -142,9 +142,10 @@ clientCatalogRouter.get(
   asyncHandler(async (req, res) => {
     const client = await db.client.findUnique({
       where: { id: req.params.id },
-      select: { product: { select: { key: true, name: true, terms: true, features: true, iconSetId: true } } },
+      select: { product: { select: { id: true, key: true, name: true, terms: true, features: true, iconSetId: true, template: true } } },
     });
     if (!client) throw new HttpError(404, "CLIENT_NOT_FOUND", "Cliente no encontrado");
+    const { template, ...giro } = client.product;
     const [current, history] = await Promise.all([
       currentCatalog(req.params.id),
       db.catalogVersion.findMany({
@@ -156,7 +157,8 @@ clientCatalogRouter.get(
     ]);
     res.json({
       // El giro del cliente: el editor ofrece los iconos de su set y oculta lo que el giro no usa.
-      giro: client.product,
+      // `hasTemplate`: el giro tiene menú base para "Copiar de la plantilla".
+      giro: { ...giro, hasTemplate: template !== null },
       current: current ? view(current) : null,
       history: history.map((h) => ({ ...h, createdAt: h.createdAt.toISOString() })),
     });

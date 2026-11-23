@@ -590,7 +590,7 @@ export interface MenuHistoryItem {
 }
 
 export interface ClientMenu {
-  giro: { key: string; name: string; features: GiroFeatures; iconSetId: string | null };
+  giro: { id: string; key: string; name: string; features: GiroFeatures; iconSetId: string | null; hasTemplate: boolean };
   current: MenuVersion | null;
   history: MenuHistoryItem[];
 }
@@ -600,3 +600,16 @@ export const getClientMenuVersion = (clientId: string, version: number) =>
   api<MenuVersion>("GET", `/clients/${clientId}/catalog/${version}`);
 export const saveClientMenu = (clientId: string, baseVersion: number, data: MenuData) =>
   api<{ saved: boolean; catalog: MenuVersion }>("PUT", `/clients/${clientId}/catalog`, { baseVersion, data });
+
+/** Plantillas de menú que trae la Central (Taquería, Sushi, Pizzería). */
+export interface MenuTemplateSummary {
+  key: string;
+  name: string;
+  categories: number;
+  products: number;
+}
+
+export const listMenuTemplates = () => api<MenuTemplateSummary[]>("GET", "/menu-templates");
+export const getMenuTemplate = (key: string) => api<{ key: string; name: string; data: MenuData }>("GET", `/menu-templates/${key}`);
+/** Menú base del giro (el que recibe cada cliente nuevo); null si no tiene. */
+export const getGiroTemplate = (productId: string) => api<{ template: MenuData | null }>("GET", `/products/${productId}/template`);

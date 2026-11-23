@@ -5,12 +5,15 @@ import { LuBoxes, LuDownload, LuLayers, LuPencil, LuPlus, LuTags, LuUsers } from
 import {
   api,
   getIconSet,
+  getMenuTemplate,
   listIconSets,
+  listMenuTemplates,
   pngSrc,
   type GiroFeatures,
   type GiroTerms,
   type IconSetFull,
   type IconSetSummary,
+  type MenuTemplateSummary,
   type Product,
 } from "../api";
 import { useNotify } from "../toast";
@@ -18,6 +21,9 @@ import { CountUp, errorOf } from "../shared";
 import { Card, Empty, Page, StatCard } from "../ui";
 
 const EMPTY = { key: "", name: "", description: "" };
+/** Valores del selector de menú base que no son una plantilla. */
+const KEEP = "__keep";
+const NONE = "__none";
 
 /** Lo que la app usa cuando el giro no dice nada: la taquería de siempre. */
 const TERM_FIELDS: { key: keyof GiroTerms; label: string; placeholder: string }[] = [
@@ -53,7 +59,13 @@ export default function Products() {
   const [iconSets, setIconSets] = useState<IconSetSummary[]>([]);
   const [previews, setPreviews] = useState<Record<string, IconSetFull>>({});
   const [editingGiro, setEditingGiro] = useState<Product | null>(null);
-  const [giro, setGiro] = useState<{ terms: GiroTerms; features: GiroFeatures; iconSetId: string }>({ terms: {}, features: {}, iconSetId: "" });
+  const [giro, setGiro] = useState<{ terms: GiroTerms; features: GiroFeatures; iconSetId: string; template: string }>({
+    terms: {},
+    features: {},
+    iconSetId: "",
+    template: KEEP,
+  });
+  const [templates, setTemplates] = useState<MenuTemplateSummary[]>([]);
 
   const load = useCallback(() => {
     setError("");
@@ -74,9 +86,10 @@ export default function Products() {
   }, [products]);
 
   const openGiro = (p: Product) => {
-    setGiro({ terms: { ...(p.terms ?? {}) }, features: { ...(p.features ?? {}) }, iconSetId: p.iconSet?.id ?? "" });
+    setGiro({ terms: { ...(p.terms ?? {}) }, features: { ...(p.features ?? {}) }, iconSetId: p.iconSet?.id ?? "", template: KEEP });
     setEditingGiro(p);
     listIconSets().then(setIconSets).catch(() => undefined);
+    listMenuTemplates().then(setTemplates).catch(() => undefined);
   };
 
   const saveGiro = async (e: FormEvent) => {
@@ -89,7 +102,12 @@ export default function Products() {
           .map(([k, v]) => [k, (v ?? "").trim()])
           .filter(([, v]) => v !== "")
       );
-      await api("PATCH", `/products/${editingGiro.id}`, { terms, features: giro.features, iconSetId: giro.iconSetId || null });
+      // Menú base: se deja como está, se quita o se copia de una plantilla (los clientes que ya existen no cambian).
+      const template =
+        giro.template === KEEP ? undefined : giro.template === NONE ? null : (await getMenuTemplate(giro.template)).data;
+      // Las tres partes explícitas: una que falta, la app la toma como en la taquería (encendida).
+      const features = Object.fromEntries(FEATURE_FIELDS.map((f) => [f.key, giro.features[f.key] ?? true]));
+      await api("PATCH", `/products/${editingGiro.id}`, { terms, features, iconSetId: giro.iconSetId || null, template });
       notify(`${editingGiro.name} actualizado: las apps lo toman en su siguiente revisión`);
       setEditingGiro(null);
       load();
@@ -274,7 +292,7 @@ export default function Products() {
                   </button>
                 )}
                 <div className="flex flex-wrap gap-1.5">
-                  {FEATURE_FIELDS.filter((f) => p.features?.[f.key]).map((f) => (
+                  {FEATURE_FIELDS.filter((f) => p.features?.[f.key] ?? true).map((f) => (
                     <span key={f.key} className="rounded-full border border-slate-200 px-2.5 py-0.5 text-[11.5px] text-slate-600 dark:border-slate-700 dark:text-slate-300">
                       {f.label}
                     </span>
@@ -416,7 +434,7 @@ export default function Products() {
                   <ITCheckbox
                     name={f.key}
                     label={f.label}
-                    checked={Boolean(giro.features[f.key])}
+                    checked={giro.features[f.key] ?? true}
                     onChange={(v: boolean) => setGiro({ ...giro, features: { ...giro.features, [f.key]: v } })}
                   />
                   <ITText muted className="ml-7 block text-xs">{f.hint}</ITText>
@@ -431,6 +449,25 @@ export default function Products() {
             options={[{ value: "", label: "Sin set (iconos de taquería de la app)" }, ...iconSets.map((s) => ({ value: s.id, label: `${s.name} · ${s.icons} iconos` }))]}
             onChange={(e) => setGiro({ ...giro, iconSetId: e.target.value })}
           />
+          <div>
+            <ITSelect
+              name="template"
+              label="Menú base"
+              value={giro.template}
+              options={[
+                {
+                  value: KEEP,
+                  label: editingGiro?.template ? `Dejar el actual (${editingGiro.template.products} productos)` : "Dejar sin menú base",
+                },
+                ...templates.map((t) => ({ value: t.key, label: `Plantilla ${t.name} · ${t.products} productos` })),
+                ...(editingGiro?.template ? [{ value: NONE, label: "Quitar el menú base" }] : []),
+              ]}
+              onChange={(e) => setGiro({ ...giro, template: e.target.value })}
+            />
+            <ITText muted className="mt-1 block text-xs">
+              Cada cliente nuevo de este giro arranca con una copia. Los clientes que ya existen no cambian.
+            </ITText>
+          </div>
           <div className="flex justify-end gap-2">
             <ITButton type="button" variant="outlined" color="gray" onClick={() => setEditingGiro(null)}>
               Cancelar

@@ -19,6 +19,7 @@ import { BACKUP_LIMIT, backupRouter } from "./routes/backup";
 import { appErrorsRouter, clientAppErrorsRouter, recentAppErrorsRouter } from "./routes/app-errors";
 import { deviceIconSetRouter, iconSetsRouter } from "./routes/icon-sets";
 import { clientCatalogRouter, deviceCatalogRouter } from "./routes/catalog";
+import { menuTemplatesRouter } from "./routes/menu-templates";
 import { CATALOG_LIMIT, ICON_SET_LIMIT } from "./lib/giro";
 
 export const createApp = () => {
@@ -58,6 +59,7 @@ export const createApp = () => {
   admin.use(requireAdmin);
   admin.use("/products", productsRouter);
   admin.use("/icon-sets", iconSetsRouter);
+  admin.use("/menu-templates", menuTemplatesRouter);
   admin.use("/plans", plansRouter);
   admin.use("/roles", rolesRouter);
   admin.use("/clients", clientUsersRouter);

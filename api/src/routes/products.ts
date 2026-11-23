@@ -10,6 +10,8 @@ const ProductInput = z.object({
   name: z.string().trim().min(2).max(80),
   description: z.string().trim().max(300).nullish().transform((v) => v || null),
 });
+/** Partes con que nace un giro nuevo; la taquería (de la migración) las tiene todas. */
+const NEW_GIRO_FEATURES = { mixes: false, meatColors: false, freeExtras: true };
 const blankToNull = (v: string | null | undefined) => (v ? v : null);
 /** Versión publicada de la app; null la quita (ya no se avisa). */
 const LatestApp = z
@@ -85,7 +87,9 @@ productsRouter.post(
   "/",
   asyncHandler(async (req, res) => {
     const input = ProductInput.parse(req.body);
-    res.status(201).json(productView(await db.product.create({ data: input, include: { iconSet: iconSetInclude } })));
+    // Lo que falte la app lo toma como de taquería; mixtos y color de carne son cosa de tacos.
+    const data = { ...input, features: NEW_GIRO_FEATURES };
+    res.status(201).json(productView(await db.product.create({ data, include: { iconSet: iconSetInclude } })));
   })
 );
 
