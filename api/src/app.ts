@@ -20,6 +20,7 @@ import { appErrorsRouter, clientAppErrorsRouter, recentAppErrorsRouter } from ".
 import { deviceIconSetRouter, iconSetsRouter } from "./routes/icon-sets";
 import { clientCatalogRouter, deviceCatalogRouter } from "./routes/catalog";
 import { menuTemplatesRouter } from "./routes/menu-templates";
+import { publicMenuRouter } from "./routes/public-menu";
 import { CATALOG_LIMIT, ICON_SET_LIMIT } from "./lib/giro";
 
 export const createApp = () => {
@@ -73,6 +74,8 @@ export const createApp = () => {
   admin.use("/billing", billingRouter);
   api.use(admin);
   app.use("/api/v1", api);
+  // Menú digital del comensal (público, HTML).
+  app.use("/m", publicMenuRouter);
 
   app.use((_req, res) => {
     res.status(404).json({ code: "NOT_FOUND", message: "No existe" });

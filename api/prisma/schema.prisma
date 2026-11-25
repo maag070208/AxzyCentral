@@ -139,6 +139,11 @@ model Client {
   backups     Backup[]
   appErrors   AppError[]
   catalogs    CatalogVersion[]
+  /// Menú digital público en `/m/<menuSlug>`; solo se ve con `menuEnabled`.
+  menuSlug    String?      @unique
+  menuEnabled Boolean      @default(false)
+  /// Datos del local en el menú digital: `{ hours, whatsapp, address }`, todos opcionales.
+  menuInfo    Json         @default("{}")
 
   @@index([planId])
   @@index([productId])
