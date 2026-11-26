@@ -140,6 +140,7 @@ model Client {
   appErrors   AppError[]
   catalogs    CatalogVersion[]
   menuVisits  MenuVisit[]
+  photos      ProductPhoto[]
   /// Menú digital público en `/m/<menuSlug>`; solo se ve con `menuEnabled`.
   menuSlug    String?      @unique
   menuEnabled Boolean      @default(false)
@@ -385,4 +386,19 @@ model MenuVisit {
 
   @@id([clientId, day])
   @@map("menu_visits")
+}
+
+/// Foto real de un producto del menú del cliente (JPEG ya reducido en la consola). Solo la ve el
+/// menú digital: no viaja a los teléfonos de cocina.
+model ProductPhoto {
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  /// `id` del producto en el menú (`CatalogVersion.data.products[].id`).
+  productId String
+  jpeg      Bytes
+  sha       String
+  updatedAt DateTime @updatedAt
+
+  @@id([clientId, productId])
+  @@map("product_photos")
 }

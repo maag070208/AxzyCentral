@@ -23,6 +23,8 @@ export type PublicMenuInput = {
   freeExtras: boolean;
   /** Llave → sha del PNG, del set de iconos del giro. */
   icons: Map<string, string>;
+  /** Producto → sha de su foto real (JPEG); un producto con foto la enseña en lugar del icono. */
+  photos?: Map<string, string>;
   /** Última vez que la cocina habló con la Central; null si nunca. */
   lastSeenAt: Date | null;
   now?: Date;
@@ -152,6 +154,11 @@ export const renderMenu = (m: PublicMenuInput): string => {
   const base = m.basePath;
   const t = themeOf(m.giroKey);
   const iconUrl = (key: string) => `${base}/i/${key}.png?v=${m.icons.get(key)!.slice(0, 12)}`;
+  const photos = m.photos ?? new Map<string, string>();
+  const photoUrl = (p: Json) => {
+    const sha = photos.get(str(p.id));
+    return sha ? `${base}/f/${encodeURIComponent(str(p.id))}.jpg?v=${sha.slice(0, 12)}` : null;
+  };
 
   /** Si todos los productos de la sección tienen las mismas opciones, se dicen una vez arriba. */
   const sharedOptions = (s: Section) => {
@@ -163,9 +170,14 @@ export const renderMenu = (m: PublicMenuInput): string => {
     s.products
       .map((p) => {
         const soldOut = p.active === false;
-        const key = iconFor(p, s.category, keys);
-        const img = key ? `<img src="${iconUrl(key)}" alt="" width="52" height="52" loading="lazy">` : "";
-        return `<li class="item${soldOut ? " out" : ""}${img ? "" : " noicon"}">${img}<div class="body"><div class="line"><h3>${escapeHtml(str(p.name))}</h3>${
+        const photo = photoUrl(p);
+        const key = photo ? null : iconFor(p, s.category, keys);
+        const img = photo
+          ? `<img class="photo" src="${photo}" alt="${escapeHtml(str(p.name))}" width="96" height="96" loading="lazy">`
+          : key
+            ? `<img src="${iconUrl(key)}" alt="" width="52" height="52" loading="lazy">`
+            : "";
+        return `<li class="item${soldOut ? " out" : ""}${photo ? " withphoto" : ""}${img ? "" : " noicon"}">${img}<div class="body"><div class="line"><h3>${escapeHtml(str(p.name))}</h3>${
           soldOut ? `<span class="tag">Agotado</span>` : ""
         }${((price) => (price ? `<span class="dots"></span>${price}` : ""))(singlePrice(p, s.category))}</div>${priceHtml(p, s.category)}${shared ? "" : optionsHtml(groupIds(p), groups)}</div></li>`;
       })
@@ -177,11 +189,15 @@ export const renderMenu = (m: PublicMenuInput): string => {
     return `<section id="${s.id}"><div class="sec"><h2>${escapeHtml(s.name)}</h2>${ORNAMENT}</div>${opts}<ul class="items">${items(s, !!shared)}</ul></section>`;
   };
 
-  // Ilustración de la portada: tres dibujos del menú, como en las cartas impresas.
-  const heroArt = [...new Set(secs.flatMap((s) => s.products.map((p) => iconFor(p, s.category, keys))).filter((k): k is string => !!k))]
-    .slice(0, 3)
-    .map((k, i) => `<img class="art a${i}" src="${iconUrl(k)}" alt="" width="128" height="128">`)
-    .join("");
+  // Portada: tres fotos reales del menú si las hay; si no, tres dibujos del giro.
+  const all = secs.flatMap((s) => s.products.map((p) => ({ p, s })));
+  const heroPhotos = all.map(({ p }) => photoUrl(p)).filter((u): u is string => !!u).slice(0, 3);
+  const heroArt = heroPhotos.length
+    ? heroPhotos.map((u, i) => `<img class="art pic a${i}" src="${u}" alt="" width="128" height="128">`).join("")
+    : [...new Set(all.map(({ p, s }) => iconFor(p, s.category, keys)).filter((k): k is string => !!k))]
+        .slice(0, 3)
+        .map((k, i) => `<img class="art a${i}" src="${iconUrl(k)}" alt="" width="128" height="128">`)
+        .join("");
 
   const freeList = m.freeExtras && Array.isArray(m.catalog.freeExtras) ? m.catalog.freeExtras.map(String).filter(Boolean) : [];
 
@@ -222,6 +238,7 @@ h1{margin:10px 0 0;max-width:58%;font:400 clamp(40px,11vw,72px)/.95 var(--displa
 .a1{right:58px;top:78px;width:76px;height:76px;transform:rotate(10deg)}
 .a2{right:-12px;top:112px;width:72px;height:72px;transform:rotate(-4deg)}
 @media (min-width:600px){.a0{right:-6px;top:-8px;width:170px;height:170px}.a1{right:120px;top:96px;width:116px;height:116px}.a2{right:-10px;top:150px;width:108px;height:108px}}
+.art.pic{object-fit:cover;border-radius:50%;border:4px solid var(--hero-ink);filter:drop-shadow(0 10px 18px rgba(0,0,0,.35))}
 .stale{max-width:820px;margin:16px auto 0;padding:10px 14px;border-left:3px solid var(--accent);background:rgba(0,0,0,.04);font-size:14px}
 nav{position:sticky;top:0;z-index:2;background:var(--paper);border-bottom:1px solid var(--line)}
 nav ul{list-style:none;margin:0 auto;padding:12px 20px;display:flex;gap:22px;overflow-x:auto;max-width:860px;scrollbar-width:none}
@@ -238,6 +255,8 @@ h2{margin:0;font:700 clamp(24px,6vw,30px)/1.05 var(--cond);letter-spacing:.16em;
 @media (min-width:760px){.items{grid-template-columns:1fr 1fr}}
 .item{display:flex;gap:14px;align-items:flex-start;padding:12px 0;border-bottom:1px dashed var(--line)}
 .item img{flex:none;width:52px;height:52px;border-radius:50%;background:rgba(0,0,0,.035);padding:3px}
+.item img.photo{width:96px;height:96px;border-radius:10px;padding:0;object-fit:cover;background:var(--line);box-shadow:0 2px 8px rgba(0,0,0,.12)}
+@media (min-width:760px){.item img.photo{width:112px;height:112px}}
 .body{flex:1;min-width:0}
 .line{display:flex;align-items:baseline;gap:8px}
 h3{margin:0;font:600 18px/1.2 var(--text);letter-spacing:.01em}
