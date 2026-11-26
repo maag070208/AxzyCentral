@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ITBadget, ITButton, ITCheckbox, ITInput } from "@axzydev/axzy_ui_system";
 import { LuCopy, LuExternalLink, LuPrinter, LuRefreshCw, LuSave } from "react-icons/lu";
-import { api, getConfig, saveDigitalMenu, suggestMenuSlug, type ClientDetail } from "../api";
+import { api, getConfig, getMenuVisits, saveDigitalMenu, suggestMenuSlug, type ClientDetail, type MenuVisits } from "../api";
 import { printMenuQr, type QrSheet } from "../components/printMenuQr";
 import { errorOf } from "../shared";
 import { useNotify } from "../toast";
@@ -33,12 +33,14 @@ export default function DigitalMenu() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState(0);
+  const [visits, setVisits] = useState<MenuVisits | null>(null);
 
   const load = useCallback(async () => {
     setError("");
     try {
-      const [c, cfg] = await Promise.all([api<ClientDetail>("GET", `/clients/${id}`), getConfig()]);
+      const [c, cfg, v] = await Promise.all([api<ClientDetail>("GET", `/clients/${id}`), getConfig(), getMenuVisits(id)]);
       setClient(c);
+      setVisits(v);
       setForm(formOf(c));
       setMenuUrl(cfg.menuUrl);
     } catch (e) {
@@ -187,6 +189,11 @@ export default function DigitalMenu() {
                     </ITButton>
                   </div>
                   {dirty && <Muted>Guarda los cambios antes de imprimir.</Muted>}
+                  {visits && (
+                    <p className="text-sm text-slate-600 dark:text-slate-300">
+                      Visitas: <b>{visits.today}</b> hoy · <b>{visits.last7}</b> en 7 días · <b>{visits.last30}</b> en 30 días
+                    </p>
+                  )}
                 </div>
               ) : (
                 <Muted>

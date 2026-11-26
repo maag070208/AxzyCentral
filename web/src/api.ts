@@ -224,6 +224,16 @@ export interface ApiConfig {
 export const saveDigitalMenu = (clientId: string, patch: { menuSlug?: string | null; menuEnabled?: boolean; menuInfo?: DigitalMenuInfo }) =>
   api<ClientDetail>("PATCH", `/clients/${clientId}`, patch);
 
+/** Visitas al menú digital (días de CDMX; sin datos del comensal). */
+export interface MenuVisits {
+  today: number;
+  last7: number;
+  last30: number;
+  days: { day: string; count: number }[];
+}
+
+export const getMenuVisits = (clientId: string) => api<MenuVisits>("GET", `/clients/${clientId}/menu-visits`);
+
 /** Dirección sugerida a partir del nombre: "Pizzas Don Luigi" → `pizzas-don-luigi`. */
 export const suggestMenuSlug = (name: string) =>
   name

@@ -5,10 +5,11 @@
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import type { Server } from "node:http";
+import { request, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import bcrypt from "bcryptjs";
 import { createApp } from "../src/app";
+import { menuHostOf } from "../src/routes/public-menu";
 import { config } from "../src/config";
 import { db } from "../src/db";
 
@@ -156,6 +157,58 @@ test("menú digital: enseña el menú de la cocina, sus agotados e iconos, y nad
   assert.equal((await call("PUT", "/catalog", { auth: code, body: { baseVersion: 1, data: menu(false) } })).status, 200);
   const out = (await page("/m/el-guero")).html;
   assert.match(out, /<li class="item out">.*?<h3>Suadero<\/h3><span class="tag">Agotado<\/span>/s);
+});
+
+test("menú digital: cuenta las visitas de comensales por día, no las vistas previas de enlaces", async () => {
+  const phone = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124 Mobile Safari/537.36";
+  for (const ua of [phone, phone, "WhatsApp/2.24.1 A", "facebookexternalhit/1.1"]) {
+    assert.equal((await fetch(`${origin}/m/el-guero`, { headers: { "User-Agent": ua } })).status, 200);
+  }
+  // La vista previa de la consola (en un marco) tampoco.
+  await fetch(`${origin}/m/el-guero`, { headers: { "User-Agent": phone, "Sec-Fetch-Dest": "iframe" } });
+  // Los iconos no cuentan como visita.
+  await fetch(`${origin}/m/el-guero/i/taco_asada.png`, { headers: { "User-Agent": phone } });
+  const v = await call("GET", `/clients/${clientId}/menu-visits`);
+  assert.equal(v.status, 200);
+  assert.equal(v.body.today, 2);
+  assert.equal(v.body.last7, 2);
+  assert.equal(v.body.days.length, 30);
+  assert.equal(v.body.days.at(-1).count, 2);
+  assert.equal((await call("GET", `/clients/${clientId}/menu-visits`, { auth: null })).status, 401);
+});
+
+test("menú digital: en su dominio se sirve en la raíz y ahí no hay API", async () => {
+  assert.equal(menuHostOf("https://menu.axzy.dev"), "menu.axzy.dev");
+  assert.equal(menuHostOf("https://menu.axzy.dev/"), "menu.axzy.dev");
+  assert.equal(menuHostOf("https://api.example.com/m"), null);
+  assert.equal(menuHostOf(undefined), null);
+
+  const site = createApp({ menuHost: "menu.test" }).listen(0, "127.0.0.1");
+  await once(site, "listening");
+  const port = (site.address() as AddressInfo).port;
+  const get = (path: string, host: string) =>
+    new Promise<{ status: number; body: string }>((ok, fail) => {
+      request({ host: "127.0.0.1", port, path, headers: { Host: host } }, (res) => {
+        let body = "";
+        res.setEncoding("utf8").on("data", (c) => (body += c)).on("end", () => ok({ status: res.statusCode!, body }));
+      }).on("error", fail).end();
+    });
+  try {
+    const menu = await get("/el-guero", "menu.test");
+    assert.equal(menu.status, 200);
+    assert.match(menu.body, /src="\/el-guero\/i\/taco_asada\.png\?v=/);
+    assert.equal((await get("/el-guero/i/taco_asada.png", "menu.test")).status, 200);
+    // En el dominio del menú no existe el API ni otras rutas.
+    const api = await get("/api/v1/config", "menu.test");
+    assert.equal(api.status, 404);
+    assert.match(api.body, /Este menú no está disponible/);
+    assert.equal((await get("/", "menu.test")).status, 404);
+    // El dominio del API sigue igual.
+    assert.equal((await get("/api/v1/config", "api.test")).status, 200);
+    assert.equal((await get("/m/el-guero", "api.test")).status, 200);
+  } finally {
+    site.close();
+  }
 });
 
 test("menú digital: apagado o cliente suspendido ya no se ve, ni sus iconos", async () => {

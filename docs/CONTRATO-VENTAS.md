@@ -1,4 +1,4 @@
-# Contrato: ventas que reporta la app y métricas
+# Contrato: lo que la app reporta y consulta en la Central
 
 La app de cocina (Tacomanda ≥ 1.1.0) sube a la Central las cuentas que ya cerró. Con eso la consola calcula métricas por cliente.
 
@@ -157,3 +157,55 @@ El teléfono de cocina es la única copia de las cuentas abiertas y del menú. P
   - Siempre en claro.
   - "Imprimir o guardar PDF" usa la impresión del navegador.
   - Los controles no salen en la hoja.
+
+## 9. Giro, iconos y menú (Tacomanda ≥ 1.3.0)
+
+La licencia dice de qué giro es el cliente; la app se viste de él y comparte el menú con la Central.
+
+- **Licencia** (`GET /license`, `POST /activate`, `/app`):
+  - `product`: `key`, `name`, `terms` (`kitchenRole`, `waiterRole`, `item`, `kitchen`) y `features` (`mixes`, `meatColors`, `freeExtras`).
+  - Lo que falte en `terms` o `features` la app lo toma de la taquería, así que una licencia sin giro se ve como la 1.2.2.
+  - `iconSet`: `{ id, version }` o `null`.
+  - `catalog`: `{ version }` del menú vigente o `null`.
+- **Iconos:** `GET /icon-set` (Bearer: código del dispositivo).
+  - Entrega el set del giro en PNG base64.
+  - Con `If-None-Match` igual a la versión responde 304.
+  - La cocina se lo pasa a meseros y pantallas.
+- **Menú:** `GET /catalog` y `PUT /catalog` (Bearer: código del dispositivo).
+  - `GET` lleva ETag `"v<versión>"` (304 si no cambió); sin menú responde 404 `NO_CATALOG`.
+  - `PUT { baseVersion, data }` guarda una versión nueva. Si la Central va en otra versión, responde 409 `CATALOG_CONFLICT` con la vigente.
+  - La primera vez (`baseVersion` 0 y sin menú) adopta el de la cocina.
+  - La cocina sincroniza cada 30 s; un menú idéntico no crea versión.
+- **Consola:** `GET/PUT /clients/:id/catalog`, con la misma regla de `baseVersion` y su historial.
+  - Un cliente nuevo de un giro con menú base arranca con una copia (versión 1, autor "plantilla").
+  - Plantillas: `GET /menu-templates` y `GET /menu-templates/:key` (`taqueria`, `sushi`, `pizzeria`).
+- **Giro nuevo:** nace con `mixes` y `meatColors` en `false` y `freeExtras` en `true`.
+
+## 10. Menú digital (comensal)
+
+Página pública del menú de cada cliente, sin sesión ni app.
+
+- **Dónde:**
+  - `PUBLIC_MENU_URL/<slug>`; por ejemplo `https://menu.axzy.dev/don-luigi`.
+  - Si `PUBLIC_MENU_URL` apunta a la raíz de un dominio, ese dominio solo sirve menús. Sin la variable, el menú vive en `<API>/m/<slug>`.
+  - `GET /config` devuelve `menuUrl` para armar los QR.
+- **Cuándo se ve:** el cliente está activo, `menuEnabled` está en `true`, tiene `menuSlug` y la Central ya tiene su menú. Si no, responde 404 "Este menú no está disponible".
+- **Qué enseña:**
+  - Nombre del local, giro y `menuInfo` (`hours`, `whatsapp`, `address`).
+  - Categorías, tamaños con precio, opciones como texto, extras sin costo e iconos del set del giro.
+  - Los agotados salen tachados.
+  - Si la cocina lleva más de 30 min sin conectarse, avisa desde cuándo es el menú.
+- **Qué no enseña:** notas, teléfono de contacto, cobros, ventas, PIN ni códigos.
+- **Iconos:** `GET /<slug>/i/<llave>.png?v=<sha>`, con caché de un año.
+- **Seguridad:**
+  - HTML armado en el servidor, sin JavaScript.
+  - CSP `default-src 'none'`; solo la consola la puede mostrar en un marco.
+  - Caché de 30 s y 1200 peticiones por minuto por IP.
+- **Consola:** `PATCH /clients/:id` con `menuSlug`, `menuEnabled` y `menuInfo`.
+  - `MENU_SLUG_REQUIRED` si se enciende sin dirección.
+  - `MENU_SLUG_TAKEN` si la dirección es de otro cliente.
+  - La página Menú digital tiene vista previa y QR para mesas (6 por hoja) y mostrador.
+- **Visitas:** `GET /clients/:id/menu-visits` devuelve `{ today, last7, last30, days }`, por día de CDMX.
+  - Solo cuenta navegadores.
+  - No cuenta las vistas previas de enlaces (WhatsApp, Facebook), los bots ni la vista previa de la consola.
+  - No guarda nada del comensal.

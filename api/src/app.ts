@@ -20,13 +20,15 @@ import { appErrorsRouter, clientAppErrorsRouter, recentAppErrorsRouter } from ".
 import { deviceIconSetRouter, iconSetsRouter } from "./routes/icon-sets";
 import { clientCatalogRouter, deviceCatalogRouter } from "./routes/catalog";
 import { menuTemplatesRouter } from "./routes/menu-templates";
-import { publicMenuRouter } from "./routes/public-menu";
+import { clientMenuVisitsRouter, menuHostOf, menuSiteRouter, publicMenuRouter } from "./routes/public-menu";
 import { CATALOG_LIMIT, ICON_SET_LIMIT } from "./lib/giro";
 
-export const createApp = () => {
+export const createApp = ({ menuHost = menuHostOf(config.PUBLIC_MENU_URL) }: { menuHost?: string | null } = {}) => {
   const app = express();
   app.set("trust proxy", 1);
   app.use(helmet());
+  // En el dominio del menú (menu.axzy.dev) solo hay menús, servidos en la raíz.
+  if (menuHost) app.use((req, res, next) => (req.hostname === menuHost ? menuSiteRouter(req, res, next) : next()));
   app.use(cors({ origin: config.WEB_ORIGIN.split(",").map((o) => o.trim()) }));
   // El respaldo de la cocina trae el estado completo; lo demás es chico.
   app.use("/api/v1/backup", express.json({ limit: BACKUP_LIMIT }));
@@ -68,6 +70,7 @@ export const createApp = () => {
   admin.use("/clients", clientSalesRouter);
   admin.use("/clients", clientAppErrorsRouter);
   admin.use("/clients", clientCatalogRouter);
+  admin.use("/clients", clientMenuVisitsRouter);
   admin.use("/app-errors", recentAppErrorsRouter);
   admin.use("/sales-overview", salesOverviewRouter);
   admin.use("/payments", paymentsRouter);

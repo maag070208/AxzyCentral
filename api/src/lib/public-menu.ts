@@ -1,5 +1,5 @@
 /**
- * Menú digital público: la página que ve el comensal en `/m/<slug>`.
+ * Menú digital público: la página que ve el comensal en `menu.axzy.dev/<slug>` (o `/m/<slug>` en el API).
  *
  * Se arma en el servidor, sin JavaScript, para que cargue rápido en celulares baratos. Solo usa lo
  * que el local quiere enseñar (nombre, menú y sus datos); nunca ventas, PIN, dispositivos ni cobros.
@@ -10,7 +10,8 @@ type Json = Record<string, unknown>;
 export type MenuInfo = { hours?: string | null; whatsapp?: string | null; address?: string | null };
 
 export type PublicMenuInput = {
-  slug: string;
+  /** Ruta de la página sin `/` final (`/don-luigi` en el dominio del menú, `/m/don-luigi` en el API). */
+  basePath: string;
   clientName: string;
   giroName: string;
   /** Lo que la app llama `Catalog`: categorías, productos, grupos de opciones y extras gratis. */
@@ -127,7 +128,7 @@ export const renderMenu = (m: PublicMenuInput): string => {
   const keys = [...m.icons.keys()];
   const groups = new Map(list(m.catalog.modifierGroups).map((g) => [str(g.id), g]));
   const secs = sections(m.catalog);
-  const base = `/m/${encodeURIComponent(m.slug)}`;
+  const base = m.basePath;
 
   /** Si todos los productos de la sección tienen las mismas opciones, se dicen una vez arriba. */
   const sharedOptions = (s: Section) => {

@@ -33,7 +33,7 @@ test("money en pesos sin centavos de más", () => {
 test("renderMenu: categorías en orden, huérfanos en Otros y aviso de menú viejo", () => {
   const now = new Date("2026-11-25T20:00:00Z");
   const html = renderMenu({
-    slug: "luigi",
+    basePath: "/m/luigi",
     clientName: "Pizzas Don Luigi",
     giroName: "Pizzería",
     catalog: {
@@ -59,7 +59,7 @@ test("renderMenu: categorías en orden, huérfanos en Otros y aviso de menú vie
 
 test("renderMenu: opciones iguales en toda la sección se dicen una vez; sin set no hay cuadros vacíos", () => {
   const html = renderMenu({
-    slug: "t",
+    basePath: "/t",
     clientName: "T",
     giroName: "Taquería",
     catalog: {

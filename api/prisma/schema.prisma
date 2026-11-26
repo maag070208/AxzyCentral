@@ -139,6 +139,7 @@ model Client {
   backups     Backup[]
   appErrors   AppError[]
   catalogs    CatalogVersion[]
+  menuVisits  MenuVisit[]
   /// Menú digital público en `/m/<menuSlug>`; solo se ve con `menuEnabled`.
   menuSlug    String?      @unique
   menuEnabled Boolean      @default(false)
@@ -373,4 +374,15 @@ model CatalogVersion {
 
   @@unique([clientId, version])
   @@map("catalog_versions")
+}
+
+/// Cuántas veces se abrió el menú digital del cliente, por día de CDMX. Sin datos del comensal.
+model MenuVisit {
+  clientId String
+  client   Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  day      DateTime @db.Date
+  count    Int      @default(0)
+
+  @@id([clientId, day])
+  @@map("menu_visits")
 }
