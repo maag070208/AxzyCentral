@@ -9,6 +9,7 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import bcrypt from "bcryptjs";
 import { createApp } from "../src/app";
+import { config } from "../src/config";
 import { db } from "../src/db";
 
 let server: Server;
@@ -121,6 +122,9 @@ test("menú digital: enseña el menú de la cocina, sus agotados e iconos, y nad
   assert.match(res.headers.get("content-type") ?? "", /text\/html/);
   assert.match(res.headers.get("cache-control") ?? "", /max-age=30/);
   assert.match(res.headers.get("content-security-policy") ?? "", /default-src 'none'/);
+  // Solo la consola la muestra en un marco (vista previa).
+  assert.ok((res.headers.get("content-security-policy") ?? "").includes(`frame-ancestors ${config.WEB_ORIGIN.split(",")[0].trim()}`));
+  assert.equal(res.headers.get("x-frame-options"), null);
   const html = res.html;
   assert.match(html, /<h1>Tacos El Güero<\/h1>/);
   assert.match(html, /Asada/);

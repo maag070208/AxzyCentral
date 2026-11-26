@@ -161,6 +161,21 @@ export interface ClientSummary {
   devices: { total: number; active: number };
   lastSeenAt: string | null;
   createdAt: string;
+  menu: DigitalMenu;
+}
+
+/** Datos del local que se ven en el menú digital. */
+export interface DigitalMenuInfo {
+  hours?: string | null;
+  whatsapp?: string | null;
+  address?: string | null;
+}
+
+/** Menú digital público del cliente (`<menuUrl>/<slug>`). */
+export interface DigitalMenu {
+  slug: string | null;
+  enabled: boolean;
+  info: DigitalMenuInfo;
 }
 
 export interface ClientDetail extends Omit<ClientSummary, "devices"> {
@@ -201,7 +216,24 @@ export interface BillingRun {
 
 export interface ApiConfig {
   apiUrl: string;
+  /** Base del menú digital; el QR de las mesas lleva `<menuUrl>/<slug>`. */
+  menuUrl: string;
 }
+
+/** Guarda el menú digital del cliente; la API no lo enciende sin dirección ni repite direcciones. */
+export const saveDigitalMenu = (clientId: string, patch: { menuSlug?: string | null; menuEnabled?: boolean; menuInfo?: DigitalMenuInfo }) =>
+  api<ClientDetail>("PATCH", `/clients/${clientId}`, patch);
+
+/** Dirección sugerida a partir del nombre: "Pizzas Don Luigi" → `pizzas-don-luigi`. */
+export const suggestMenuSlug = (name: string) =>
+  name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60)
+    .replace(/-+$/g, "");
 
 /** Respuesta de crear/rotar el código de un dispositivo. */
 export interface IssuedDevice {

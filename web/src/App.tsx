@@ -6,6 +6,7 @@ import { api, session, setUnauthorizedHandler, type Me } from "./api";
 import { AxzyLoader } from "./AxzyLogo";
 import ClientDetail from "./pages/ClientDetail";
 import ClientMenu from "./pages/ClientMenu";
+import DigitalMenu from "./pages/DigitalMenu";
 import Clients from "./pages/Clients";
 import Cobros from "./pages/Cobros";
 import Home from "./pages/Home";
@@ -126,6 +127,7 @@ export default function App() {
         <Route path="/clientes" element={<Clients />} />
         <Route path="/clientes/:id" element={<ClientDetail />} />
         <Route path="/clientes/:id/menu" element={<ClientMenu />} />
+        <Route path="/clientes/:id/menu-digital" element={<DigitalMenu />} />
         <Route path="/metricas" element={<Metrics />} />
         <Route path="/cobros" element={<Cobros />} />
         <Route path="/productos" element={<Products />} />

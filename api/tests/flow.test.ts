@@ -189,6 +189,8 @@ test("GET /config es público y devuelve la URL del API para el QR", async () =>
   assert.match(res.body.apiUrl, /^https?:\/\//);
   assert.ok(res.body.apiUrl.endsWith("/api/v1"));
   assert.ok(!res.body.apiUrl.endsWith("/"));
+  // Base del menú digital para los QR de las mesas.
+  assert.match(res.body.menuUrl, /^https?:\/\/.+\/m$/);
 });
 
 test("POST /activate: da de alta, adopta nombre/modelo y responde como /license", async () => {

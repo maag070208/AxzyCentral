@@ -1,5 +1,6 @@
 import { Router, type Response } from "express";
 import rateLimit from "express-rate-limit";
+import { config } from "../config";
 import { db } from "../db";
 import { asyncHandler } from "../errors";
 import { renderMenu, renderUnavailable, type MenuInfo } from "../lib/public-menu";
@@ -13,11 +14,14 @@ export const publicMenuRouter = Router();
 // Un QR en cada mesa y el WiFi del local (una IP): cada visita nueva pide la página y ~30 iconos.
 publicMenuRouter.use(rateLimit({ windowMs: 60_000, limit: 1200, standardHeaders: true, legacyHeaders: false }));
 
-// La página no lleva JavaScript ni nada de fuera: solo sus estilos y sus iconos.
+// La página no lleva JavaScript ni nada de fuera: solo sus estilos y sus iconos. Solo la consola la
+// puede mostrar en un marco (vista previa).
+const frameAncestors = config.WEB_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean).join(" ") || "'none'";
 publicMenuRouter.use((_req, res, next) => {
+  res.removeHeader("X-Frame-Options");
   res.set(
     "Content-Security-Policy",
-    "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    `default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors ${frameAncestors}`
   );
   next();
 });

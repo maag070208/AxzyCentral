@@ -10,7 +10,11 @@ const apiUrlOf = (req: Request): string => {
   return configured.replace(/\/+$/, "");
 };
 
-/** Público: la consola lo usa para armar el QR y la app para guardar el servidor. */
+/** Base del menú digital sin `/` final: `<base>/<slug>` es lo que lleva el QR de las mesas. */
+const menuUrlOf = (req: Request): string =>
+  (config.PUBLIC_MENU_URL ?? `${req.protocol}://${req.get("host") ?? "localhost"}/m`).replace(/\/+$/, "");
+
+/** Público: la consola lo usa para armar los QR y la app para guardar el servidor. */
 configRouter.get("/", (req, res) => {
-  res.set("Cache-Control", "no-store").json({ apiUrl: apiUrlOf(req) });
+  res.set("Cache-Control", "no-store").json({ apiUrl: apiUrlOf(req), menuUrl: menuUrlOf(req) });
 });
