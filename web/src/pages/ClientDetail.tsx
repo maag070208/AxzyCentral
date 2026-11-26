@@ -22,6 +22,7 @@ import {
   LuRefreshCw,
   LuRotateCcw,
   LuShieldOff,
+  LuUtensils,
   LuWallet,
   LuX,
 } from "react-icons/lu";
@@ -197,6 +198,9 @@ export default function ClientDetail() {
             <ITButton variant="outlined" icon={<LuQrCode size={15} />} onClick={openNewQr}>
               Generar QR
             </ITButton>
+            <ITButton variant="outlined" icon={<LuUtensils size={15} />} onClick={() => navigate(`/clientes/${client.id}/menu`)}>
+              Menú
+            </ITButton>
             <ITButton variant="outlined" icon={<LuPencil size={15} />} onClick={() => setEditOpen(true)}>
               Editar
             </ITButton>
@@ -229,6 +233,7 @@ export default function ClientDetail() {
 
           <aside className="flex min-w-0 flex-col gap-5 xl:sticky xl:top-6">
             <SummaryCard client={client} onEdit={() => setEditOpen(true)} onWhatsapp={() => void copyWhatsapp()} />
+            <DigitalMenuCard client={client} onOpen={() => navigate(`/clientes/${client.id}/menu-digital`)} />
           </aside>
         </div>
       )}
@@ -295,6 +300,29 @@ function SummaryRow({ label, children }: { label: string; children: ReactNode })
       <dt className="shrink-0 text-[12.5px] text-slate-500 dark:text-slate-400">{label}</dt>
       <dd className="min-w-0 text-right text-[13px] font-medium text-slate-800 dark:text-slate-100">{children}</dd>
     </div>
+  );
+}
+
+/** Estado del menú digital del cliente; se configura en su propia página. */
+function DigitalMenuCard({ client, onOpen }: { client: Detail; onOpen: () => void }) {
+  const live = client.menu.enabled && !!client.menu.slug && client.status === "ACTIVE";
+  return (
+    <Card
+      title="Menú digital"
+      subtitle="Lo que ve el comensal con el QR de la mesa"
+      actions={
+        <ITButton size="sm" variant="outlined" icon={<LuQrCode size={14} />} onClick={onOpen}>
+          {client.menu.slug ? "Configurar" : "Activar"}
+        </ITButton>
+      }
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="min-w-0 truncate font-mono text-sm text-slate-600 dark:text-slate-300">
+          {client.menu.slug ? `/${client.menu.slug}` : "Sin dirección"}
+        </span>
+        <ITBadget color={live ? "success" : "gray"} label={live ? "Encendido" : "Apagado"} size="sm" />
+      </div>
+    </Card>
   );
 }
 

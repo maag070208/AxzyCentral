@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { ITLayout, useITTheme, type ITNavigationItem } from "@axzydev/axzy_ui_system";
-import { LuBoxes, LuChartColumn, LuLayoutDashboard, LuReceipt, LuTags, LuUsers } from "react-icons/lu";
+import { LuBoxes, LuChartColumn, LuImages, LuLayoutDashboard, LuReceipt, LuTags, LuUsers } from "react-icons/lu";
 import { api, session, setUnauthorizedHandler, type Me } from "./api";
 import { AxzyLoader } from "./AxzyLogo";
 import ClientDetail from "./pages/ClientDetail";
+import ClientMenu from "./pages/ClientMenu";
+import DigitalMenu from "./pages/DigitalMenu";
 import Clients from "./pages/Clients";
 import Cobros from "./pages/Cobros";
 import Home from "./pages/Home";
@@ -13,6 +15,7 @@ import MonthlyReport from "./pages/MonthlyReport";
 import Metrics from "./pages/Metrics";
 import Plans from "./pages/Plans";
 import Products from "./pages/Products";
+import Icons from "./pages/Icons";
 
 const NAV = [
   { id: "home", path: "/", label: "Inicio", icon: <LuLayoutDashboard size={18} /> },
@@ -20,6 +23,7 @@ const NAV = [
   { id: "metrics", path: "/metricas", label: "Métricas", icon: <LuChartColumn size={18} /> },
   { id: "payments", path: "/cobros", label: "Cobros", icon: <LuReceipt size={18} /> },
   { id: "products", path: "/productos", label: "Productos", icon: <LuBoxes size={18} /> },
+  { id: "icons", path: "/iconos", label: "Iconos", icon: <LuImages size={18} /> },
   { id: "plans", path: "/planes", label: "Planes", icon: <LuTags size={18} /> },
 ];
 
@@ -122,9 +126,12 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/clientes" element={<Clients />} />
         <Route path="/clientes/:id" element={<ClientDetail />} />
+        <Route path="/clientes/:id/menu" element={<ClientMenu />} />
+        <Route path="/clientes/:id/menu-digital" element={<DigitalMenu />} />
         <Route path="/metricas" element={<Metrics />} />
         <Route path="/cobros" element={<Cobros />} />
         <Route path="/productos" element={<Products />} />
+        <Route path="/iconos" element={<Icons />} />
         <Route path="/planes" element={<Plans />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

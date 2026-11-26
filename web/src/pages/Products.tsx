@@ -1,13 +1,42 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { ITBadget, ITButton, ITDialog, ITInput, ITText } from "@axzydev/axzy_ui_system";
-import { LuBoxes, LuDownload, LuLayers, LuPlus, LuTags, LuUsers } from "react-icons/lu";
-import { api, type Product } from "../api";
+import { ITBadget, ITButton, ITCheckbox, ITDialog, ITInput, ITSelect, ITText } from "@axzydev/axzy_ui_system";
+import { LuBoxes, LuDownload, LuLayers, LuPencil, LuPlus, LuTags, LuUsers } from "react-icons/lu";
+import {
+  api,
+  getIconSet,
+  getMenuTemplate,
+  listIconSets,
+  listMenuTemplates,
+  pngSrc,
+  type GiroFeatures,
+  type GiroTerms,
+  type IconSetFull,
+  type IconSetSummary,
+  type MenuTemplateSummary,
+  type Product,
+} from "../api";
 import { useNotify } from "../toast";
 import { CountUp, errorOf } from "../shared";
 import { Card, Empty, Page, StatCard } from "../ui";
 
 const EMPTY = { key: "", name: "", description: "" };
+/** Valores del selector de menú base que no son una plantilla. */
+const KEEP = "__keep";
+const NONE = "__none";
+
+/** Lo que la app usa cuando el giro no dice nada: la taquería de siempre. */
+const TERM_FIELDS: { key: keyof GiroTerms; label: string; placeholder: string }[] = [
+  { key: "kitchenRole", label: "Quien prepara", placeholder: "Taquero" },
+  { key: "waiterRole", label: "Quien toma la orden", placeholder: "Mesero" },
+  { key: "item", label: "La pieza", placeholder: "Taco" },
+  { key: "kitchen", label: "Dónde se prepara", placeholder: "Cocina" },
+];
+const FEATURE_FIELDS: { key: keyof GiroFeatures; label: string; hint: string }[] = [
+  { key: "mixes", label: "Mixtos", hint: "Un producto con varias carnes (campechano)" },
+  { key: "meatColors", label: "Color de carne", hint: "Barra de color por carne en el ticket" },
+  { key: "freeExtras", label: "Extras sin costo", hint: "Cebollitas, chiles, salsas por persona" },
+];
 
 const TONE = [
   "bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
@@ -27,6 +56,16 @@ export default function Products() {
   const [busy, setBusy] = useState(false);
   const [publishing, setPublishing] = useState<Product | null>(null);
   const [release, setRelease] = useState({ versionCode: "", versionName: "", url: "", notes: "" });
+  const [iconSets, setIconSets] = useState<IconSetSummary[]>([]);
+  const [previews, setPreviews] = useState<Record<string, IconSetFull>>({});
+  const [editingGiro, setEditingGiro] = useState<Product | null>(null);
+  const [giro, setGiro] = useState<{ terms: GiroTerms; features: GiroFeatures; iconSetId: string; template: string }>({
+    terms: {},
+    features: {},
+    iconSetId: "",
+    template: KEEP,
+  });
+  const [templates, setTemplates] = useState<MenuTemplateSummary[]>([]);
 
   const load = useCallback(() => {
     setError("");
@@ -35,6 +74,49 @@ export default function Products() {
       .catch((e) => setError(errorOf(e)));
   }, []);
   useEffect(load, [load]);
+
+  // Vista previa: los primeros iconos (y el ícono de app) de cada set asignado.
+  useEffect(() => {
+    const ids = [...new Set((products ?? []).map((p) => p.iconSet?.id).filter((id): id is string => Boolean(id)))];
+    ids.forEach((id) => {
+      getIconSet(id, 6)
+        .then((set) => setPreviews((prev) => ({ ...prev, [id]: set })))
+        .catch(() => undefined);
+    });
+  }, [products]);
+
+  const openGiro = (p: Product) => {
+    setGiro({ terms: { ...(p.terms ?? {}) }, features: { ...(p.features ?? {}) }, iconSetId: p.iconSet?.id ?? "", template: KEEP });
+    setEditingGiro(p);
+    listIconSets().then(setIconSets).catch(() => undefined);
+    listMenuTemplates().then(setTemplates).catch(() => undefined);
+  };
+
+  const saveGiro = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingGiro) return;
+    setBusy(true);
+    try {
+      const terms = Object.fromEntries(
+        Object.entries(giro.terms)
+          .map(([k, v]) => [k, (v ?? "").trim()])
+          .filter(([, v]) => v !== "")
+      );
+      // Menú base: se deja como está, se quita o se copia de una plantilla (los clientes que ya existen no cambian).
+      const template =
+        giro.template === KEEP ? undefined : giro.template === NONE ? null : (await getMenuTemplate(giro.template)).data;
+      // Las tres partes explícitas: una que falta, la app la toma como en la taquería (encendida).
+      const features = Object.fromEntries(FEATURE_FIELDS.map((f) => [f.key, giro.features[f.key] ?? true]));
+      await api("PATCH", `/products/${editingGiro.id}`, { terms, features, iconSetId: giro.iconSetId || null, template });
+      notify(`${editingGiro.name} actualizado: las apps lo toman en su siguiente revisión`);
+      setEditingGiro(null);
+      load();
+    } catch (err) {
+      notify(errorOf(err), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const keyFrom = (name: string) =>
     name
@@ -154,9 +236,17 @@ export default function Products() {
             <Card key={p.id} bodyClassName="p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${TONE[i % TONE.length]}`}>
-                    <LuBoxes size={21} />
-                  </span>
+                  {p.iconSet && (previews[p.iconSet.id]?.appIcon || previews[p.iconSet.id]?.icons[0]) ? (
+                    <img
+                      src={pngSrc((previews[p.iconSet.id].appIcon ?? previews[p.iconSet.id].icons[0].png)!)}
+                      alt=""
+                      className="h-11 w-11 shrink-0 rounded-xl"
+                    />
+                  ) : (
+                    <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${TONE[i % TONE.length]}`}>
+                      <LuBoxes size={21} />
+                    </span>
+                  )}
                   <div className="min-w-0">
                     <h2 className="truncate text-[17px] font-semibold tracking-tight text-slate-900 dark:text-white">{p.name}</h2>
                     <p className="font-mono text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">{p.key}</p>
@@ -168,6 +258,50 @@ export default function Products() {
               <p className="mt-3 line-clamp-2 min-h-[36px] text-[13.5px] leading-relaxed text-slate-500 dark:text-slate-400">
                 {p.description || "Sin descripción."}
               </p>
+
+              <div className="mt-3 flex flex-col gap-2 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[12.5px] text-slate-600 dark:text-slate-300">
+                    {[p.terms?.kitchenRole ?? "Taquero", p.terms?.waiterRole ?? "Mesero"].join(" · ")}
+                    {` · "${p.terms?.item ?? "Taco"}"`}
+                  </span>
+                  <ITButton size="sm" variant="text" icon={<LuPencil size={13} />} onClick={() => openGiro(p)}>
+                    Editar giro
+                  </ITButton>
+                </div>
+                {p.iconSet ? (
+                  <div className="flex items-center gap-1.5">
+                    {(previews[p.iconSet.id]?.icons ?? []).map((icon) => (
+                      <img key={icon.key} src={pngSrc(icon.png)} alt={icon.label} className="h-9 w-9" />
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => navigate("/iconos")}
+                      className="ml-auto text-[12px] font-medium text-[var(--color-axzy-deep)] hover:underline"
+                    >
+                      {p.iconSet.name} · {p.iconSet.icons}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => openGiro(p)}
+                    className="rounded-lg border border-dashed border-slate-300 py-2 text-[12.5px] text-slate-500 hover:border-sky-300 dark:border-slate-600 dark:text-slate-400"
+                  >
+                    Sin set de iconos · asignar uno
+                  </button>
+                )}
+                <div className="flex flex-wrap gap-1.5">
+                  {FEATURE_FIELDS.filter((f) => p.features?.[f.key] ?? true).map((f) => (
+                    <span key={f.key} className="rounded-full border border-slate-200 px-2.5 py-0.5 text-[11.5px] text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                      {f.label}
+                    </span>
+                  ))}
+                  <span className="rounded-full border border-slate-200 px-2.5 py-0.5 text-[11.5px] text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                    {p.template ? `Menú base: ${p.template.products} productos` : "Sin menú base"}
+                  </span>
+                </div>
+              </div>
 
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <button
@@ -265,6 +399,81 @@ export default function Products() {
             </ITButton>
             <ITButton type="submit" disabled={busy || form.name.trim().length < 2 || form.key.length < 2}>
               {busy ? "Guardando…" : "Crear producto"}
+            </ITButton>
+          </div>
+        </form>
+      </ITDialog>
+      <ITDialog
+        isOpen={editingGiro !== null}
+        onClose={() => setEditingGiro(null)}
+        title={`Giro de ${editingGiro?.name ?? "el producto"}`}
+        className="w-[min(94vw,620px)]"
+      >
+        <form onSubmit={saveGiro} className="grid gap-5" noValidate>
+          <div>
+            <ITText className="mb-1 block font-semibold">Palabras</ITText>
+            <ITText muted className="mb-3 block text-xs">Lo que la app dice en pantalla. Vacío = como en la taquería.</ITText>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {TERM_FIELDS.map((f) => (
+                <ITInput
+                  key={f.key}
+                  name={f.key}
+                  label={f.label}
+                  value={giro.terms[f.key] ?? ""}
+                  placeholder={f.placeholder}
+                  onChange={(e) => setGiro({ ...giro, terms: { ...giro.terms, [f.key]: e.target.value.slice(0, 30) } })}
+                />
+              ))}
+            </div>
+          </div>
+          <div>
+            <ITText className="mb-2 block font-semibold">Partes que usa</ITText>
+            <div className="grid gap-2">
+              {FEATURE_FIELDS.map((f) => (
+                <div key={f.key}>
+                  <ITCheckbox
+                    name={f.key}
+                    label={f.label}
+                    checked={giro.features[f.key] ?? true}
+                    onChange={(v: boolean) => setGiro({ ...giro, features: { ...giro.features, [f.key]: v } })}
+                  />
+                  <ITText muted className="ml-7 block text-xs">{f.hint}</ITText>
+                </div>
+              ))}
+            </div>
+          </div>
+          <ITSelect
+            name="iconSetId"
+            label="Set de iconos"
+            value={giro.iconSetId}
+            options={[{ value: "", label: "Sin set (iconos de taquería de la app)" }, ...iconSets.map((s) => ({ value: s.id, label: `${s.name} · ${s.icons} iconos` }))]}
+            onChange={(e) => setGiro({ ...giro, iconSetId: e.target.value })}
+          />
+          <div>
+            <ITSelect
+              name="template"
+              label="Menú base"
+              value={giro.template}
+              options={[
+                {
+                  value: KEEP,
+                  label: editingGiro?.template ? `Dejar el actual (${editingGiro.template.products} productos)` : "Dejar sin menú base",
+                },
+                ...templates.map((t) => ({ value: t.key, label: `Plantilla ${t.name} · ${t.products} productos` })),
+                ...(editingGiro?.template ? [{ value: NONE, label: "Quitar el menú base" }] : []),
+              ]}
+              onChange={(e) => setGiro({ ...giro, template: e.target.value })}
+            />
+            <ITText muted className="mt-1 block text-xs">
+              Cada cliente nuevo de este giro arranca con una copia. Los clientes que ya existen no cambian.
+            </ITText>
+          </div>
+          <div className="flex justify-end gap-2">
+            <ITButton type="button" variant="outlined" color="gray" onClick={() => setEditingGiro(null)}>
+              Cancelar
+            </ITButton>
+            <ITButton type="submit" disabled={busy}>
+              {busy ? "Guardando…" : "Guardar giro"}
             </ITButton>
           </div>
         </form>

@@ -229,6 +229,9 @@ importers:
       '@axzydev/axzy_ui_system':
         specifier: 1.8.15
         version: 1.8.15(@types/react@19.3.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
+      fflate:
+        specifier: 0.8.2
+        version: 0.8.2
       lottie-web:
         specifier: ^5.13.0
         version: 5.13.0
@@ -1236,6 +1239,9 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.2:
+    resolution: {integrity: sha512-cPJU47OaAoCbg0pBvzsgpTPhmhqI5eJjh/JIu8tPj5q+T7iLvW/JAYUqmE7KOB4R1ZyEhzBaIQpQpardBF5z8A==}
 
   file-selector@2.1.2:
     resolution: {integrity: sha512-QgXo+mXTe8ljeqUFaX3QVHc5osSItJ/Km+xpocx0aSqWGMSCf6qYs/VnzZgS864Pjn5iceMRFigeAV7AfTlaig==}
@@ -2612,6 +2618,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:
       picomatch: 4.0.7
+
+  fflate@0.8.2: {}
 
   file-selector@2.1.2:
     dependencies:

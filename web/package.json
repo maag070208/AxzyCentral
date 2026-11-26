@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@axzydev/axzy_ui_system": "1.8.15",
+    "fflate": "0.8.2",
     "lottie-web": "^5.13.0",
     "qrcode": "^1.5.4",
     "react": "19.0.0",

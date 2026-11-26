@@ -24,7 +24,26 @@ const ClientFields = z.object({
 });
 const ClientInput = ClientFields.extend({ productId: z.string().uuid() });
 /** El producto no se cambia: sus planes y licencias son de ese producto. */
-const ClientUpdate = ClientFields.partial().extend({ status: z.enum(["ACTIVE", "SUSPENDED"]).optional() });
+/** Datos del local que se ven en el menú digital; un texto vacío lo quita. */
+const MenuInfo = z
+  .object({ hours: optionalText(120), whatsapp: optionalText(20), address: optionalText(200) })
+  .partial()
+  .strict();
+const ClientUpdate = ClientFields.partial().extend({
+  status: z.enum(["ACTIVE", "SUSPENDED"]).optional(),
+  /** Dirección del menú digital (`/m/don-luigi`); null la quita. */
+  menuSlug: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "Solo minúsculas, números y guiones")
+    .min(3)
+    .max(60)
+    .nullable()
+    .optional(),
+  menuEnabled: z.boolean().optional(),
+  menuInfo: MenuInfo.optional(),
+});
 
 const Period = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Periodo AAAA-MM");
 
@@ -114,6 +133,7 @@ const summary = (t: Full, today = dateOnly(new Date())) => {
     devices: { total: t.devices.length, active: t.devices.filter((d) => d.active).length },
     lastSeenAt: seen.length ? new Date(Math.max(...seen)).toISOString() : null,
     createdAt: t.createdAt.toISOString(),
+    menu: { slug: t.menuSlug, enabled: t.menuEnabled, info: t.menuInfo },
   };
 };
 
@@ -157,15 +177,15 @@ const assertAssignable = async (productId: string, planId: string | null | undef
   if (!plan.active) throw new HttpError(409, "PLAN_INACTIVE", "Ese plan está dado de baja");
 };
 
-/** El unique `(clientId, period)` es el que impide dos cobros del mismo mes. */
-const isPeriodConflict = (err: unknown): boolean =>
+/** Choque de un unique: `(clientId, period)` en cobros (dos del mismo mes) o `menuSlug` en clientes. */
+const isUniqueConflict = (err: unknown): boolean =>
   err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002";
 
 const createPayment = async (data: Prisma.PaymentUncheckedCreateInput) => {
   try {
     return await db.payment.create({ data });
   } catch (err) {
-    if (isPeriodConflict(err)) throw new HttpError(409, "PAYMENT_PERIOD_EXISTS", "Ese periodo ya tiene un cobro para este cliente");
+    if (isUniqueConflict(err)) throw new HttpError(409, "PAYMENT_PERIOD_EXISTS", "Ese periodo ya tiene un cobro para este cliente");
     throw err;
   }
 };
@@ -190,6 +210,19 @@ clientsRouter.post(
     if (!product.active) throw new HttpError(409, "PRODUCT_INACTIVE", "Ese producto está dado de baja");
     await assertAssignable(input.productId, input.planId);
     const t = await db.client.create({ data: { ...input, planId: input.planId ?? null }, include });
+    // Cliente nuevo de un giro con menú base: arranca con una copia (versión 1).
+    if (product.template) {
+      await db.catalogVersion.create({
+        data: {
+          clientId: t.id,
+          version: 1,
+          data: product.template as Prisma.InputJsonObject,
+          source: "central",
+          author: "plantilla",
+          sizeBytes: Buffer.byteLength(JSON.stringify(product.template)),
+        },
+      });
+    }
     res.status(201).json(detail(t));
   })
 );
@@ -207,7 +240,14 @@ clientsRouter.patch(
     const input = ClientUpdate.parse(req.body);
     const current = await findFull(req.params.id);
     if (input.planId !== undefined) await assertAssignable(current.productId, input.planId, current.planId);
-    const t = await db.client.update({ where: { id: current.id }, data: input, include });
+    const slug = input.menuSlug !== undefined ? input.menuSlug : current.menuSlug;
+    if ((input.menuEnabled ?? current.menuEnabled) && !slug) {
+      throw new HttpError(409, "MENU_SLUG_REQUIRED", "Ponle una dirección al menú antes de encenderlo");
+    }
+    const t = await db.client.update({ where: { id: current.id }, data: input, include }).catch((err) => {
+      if (isUniqueConflict(err)) throw new HttpError(409, "MENU_SLUG_TAKEN", "Esa dirección ya la usa otro cliente");
+      throw err;
+    });
     res.json(detail(t));
   })
 );

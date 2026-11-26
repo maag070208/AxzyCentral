@@ -1,0 +1,368 @@
+{
+  "categories": [
+    {
+      "name": "Pizzas",
+      "singular": "Pizza",
+      "freeExtras": false
+    },
+    {
+      "name": "Especialidades",
+      "freeExtras": false
+    },
+    {
+      "name": "Entradas",
+      "freeExtras": false
+    },
+    {
+      "name": "Postres",
+      "freeExtras": false
+    },
+    {
+      "name": "Bebidas",
+      "freeExtras": false
+    }
+  ],
+  "products": [
+    {
+      "id": "pizzas-margarita",
+      "name": "Margarita",
+      "priceCents": 11900,
+      "category": "Pizzas",
+      "icon": "pizza_margherita",
+      "variants": [
+        {
+          "name": "Chica",
+          "priceCents": 11900
+        },
+        {
+          "name": "Mediana",
+          "priceCents": 16900
+        },
+        {
+          "name": "Grande",
+          "priceCents": 21900
+        }
+      ],
+      "modifierGroupIds": [
+        "g-orilla",
+        "g-masa",
+        "g-quitar"
+      ]
+    },
+    {
+      "id": "pizzas-pepperoni",
+      "name": "Pepperoni",
+      "priceCents": 12900,
+      "category": "Pizzas",
+      "icon": "pizza_pepperoni",
+      "variants": [
+        {
+          "name": "Chica",
+          "priceCents": 12900
+        },
+        {
+          "name": "Mediana",
+          "priceCents": 17900
+        },
+        {
+          "name": "Grande",
+          "priceCents": 22900
+        }
+      ],
+      "modifierGroupIds": [
+        "g-orilla",
+        "g-masa",
+        "g-quitar"
+      ]
+    },
+    {
+      "id": "pizzas-hawaiana",
+      "name": "Hawaiana",
+      "priceCents": 12900,
+      "category": "Pizzas",
+      "icon": "pizza_hawaiana",
+      "variants": [
+        {
+          "name": "Chica",
+          "priceCents": 12900
+        },
+        {
+          "name": "Mediana",
+          "priceCents": 17900
+        },
+        {
+          "name": "Grande",
+          "priceCents": 22900
+        }
+      ],
+      "modifierGroupIds": [
+        "g-orilla",
+        "g-masa",
+        "g-quitar"
+      ]
+    },
+    {
+      "id": "pizzas-mexicana",
+      "name": "Mexicana",
+      "priceCents": 13900,
+      "category": "Pizzas",
+      "icon": "pizza_mexicana",
+      "variants": [
+        {
+          "name": "Chica",
+          "priceCents": 13900
+        },
+        {
+          "name": "Mediana",
+          "priceCents": 18900
+        },
+        {
+          "name": "Grande",
+          "priceCents": 23900
+        }
+      ],
+      "modifierGroupIds": [
+        "g-orilla",
+        "g-masa",
+        "g-quitar"
+      ]
+    },
+    {
+      "id": "pizzas-cuatro-quesos",
+      "name": "Cuatro quesos",
+      "priceCents": 14900,
+      "category": "Pizzas",
+      "icon": "pizza_cuatro_quesos",
+      "variants": [
+        {
+          "name": "Chica",
+          "priceCents": 14900
+        },
+        {
+          "name": "Mediana",
+          "priceCents": 19900
+        },
+        {
+          "name": "Grande",
+          "priceCents": 24900
+        }
+      ],
+      "modifierGroupIds": [
+        "g-orilla",
+        "g-masa",
+        "g-quitar"
+      ]
+    },
+    {
+      "id": "pizzas-vegetariana",
+      "name": "Vegetariana",
+      "priceCents": 13900,
+      "category": "Pizzas",
+      "icon": "pizza_vegetariana",
+      "variants": [
+        {
+          "name": "Chica",
+          "priceCents": 13900
+        },
+        {
+          "name": "Mediana",
+          "priceCents": 18900
+        },
+        {
+          "name": "Grande",
+          "priceCents": 23900
+        }
+      ],
+      "modifierGroupIds": [
+        "g-orilla",
+        "g-masa",
+        "g-quitar"
+      ]
+    },
+    {
+      "id": "pizzas-champinones",
+      "name": "Champiñones",
+      "priceCents": 12900,
+      "category": "Pizzas",
+      "icon": "pizza_champinones",
+      "variants": [
+        {
+          "name": "Chica",
+          "priceCents": 12900
+        },
+        {
+          "name": "Mediana",
+          "priceCents": 17900
+        },
+        {
+          "name": "Grande",
+          "priceCents": 22900
+        }
+      ],
+      "modifierGroupIds": [
+        "g-orilla",
+        "g-masa",
+        "g-quitar"
+      ]
+    },
+    {
+      "id": "pizzas-carnes-frias",
+      "name": "Carnes frías",
+      "priceCents": 14900,
+      "category": "Pizzas",
+      "icon": "pizza_carnes",
+      "variants": [
+        {
+          "name": "Chica",
+          "priceCents": 14900
+        },
+        {
+          "name": "Mediana",
+          "priceCents": 19900
+        },
+        {
+          "name": "Grande",
+          "priceCents": 24900
+        }
+      ],
+      "modifierGroupIds": [
+        "g-orilla",
+        "g-masa",
+        "g-quitar"
+      ]
+    },
+    {
+      "id": "especialidades-calzone",
+      "name": "Calzone",
+      "priceCents": 14500,
+      "category": "Especialidades",
+      "icon": "pizza_calzone",
+      "modifierGroupIds": [
+        "g-quitar"
+      ]
+    },
+    {
+      "id": "especialidades-espagueti",
+      "name": "Espagueti",
+      "priceCents": 12000,
+      "category": "Especialidades",
+      "icon": "side_espagueti"
+    },
+    {
+      "id": "entradas-pan-de-ajo",
+      "name": "Pan de ajo",
+      "priceCents": 6500,
+      "category": "Entradas",
+      "icon": "side_pan_de_ajo"
+    },
+    {
+      "id": "entradas-alitas",
+      "name": "Alitas",
+      "priceCents": 11000,
+      "category": "Entradas",
+      "icon": "side_alitas",
+      "variants": [
+        {
+          "name": "6 piezas",
+          "priceCents": 11000
+        },
+        {
+          "name": "12 piezas",
+          "priceCents": 19900
+        }
+      ]
+    },
+    {
+      "id": "entradas-papas",
+      "name": "Papas",
+      "priceCents": 6000,
+      "category": "Entradas",
+      "icon": "side_papas"
+    },
+    {
+      "id": "entradas-ensalada",
+      "name": "Ensalada",
+      "priceCents": 8500,
+      "category": "Entradas",
+      "icon": "side_ensalada"
+    },
+    {
+      "id": "postres-tiramisu",
+      "name": "Tiramisú",
+      "priceCents": 7500,
+      "category": "Postres",
+      "icon": "side_tiramisu"
+    },
+    {
+      "id": "bebidas-refresco",
+      "name": "Refresco",
+      "priceCents": 3500,
+      "category": "Bebidas",
+      "icon": "beb_refresco",
+      "modifierGroupIds": [
+        "g-hielo"
+      ]
+    },
+    {
+      "id": "bebidas-agua",
+      "name": "Agua",
+      "priceCents": 2500,
+      "category": "Bebidas",
+      "icon": "beb_agua"
+    },
+    {
+      "id": "bebidas-cerveza",
+      "name": "Cerveza",
+      "priceCents": 5500,
+      "category": "Bebidas",
+      "icon": "beb_cerveza"
+    },
+    {
+      "id": "bebidas-copa-de-vino",
+      "name": "Copa de vino",
+      "priceCents": 9000,
+      "category": "Bebidas",
+      "icon": "beb_vino"
+    }
+  ],
+  "modifierGroups": [
+    {
+      "id": "g-orilla",
+      "name": "Orilla",
+      "options": [
+        "Normal",
+        "Rellena de queso"
+      ],
+      "defaultOption": "Normal"
+    },
+    {
+      "id": "g-masa",
+      "name": "Masa",
+      "options": [
+        "Tradicional",
+        "Delgada"
+      ],
+      "defaultOption": "Tradicional"
+    },
+    {
+      "id": "g-quitar",
+      "name": "Quitar",
+      "options": [
+        "Sin cebolla",
+        "Sin aceitunas",
+        "Sin jalapeño",
+        "Sin piña"
+      ],
+      "exclusive": false
+    },
+    {
+      "id": "g-hielo",
+      "name": "Hielo",
+      "options": [
+        "Con hielo",
+        "Sin hielo"
+      ]
+    }
+  ],
+  "freeExtras": []
+}

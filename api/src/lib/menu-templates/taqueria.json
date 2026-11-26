@@ -1,0 +1,621 @@
+{
+  "categories": [
+    {
+      "name": "Tacos",
+      "singular": "Taco"
+    },
+    {
+      "name": "Quesatacos",
+      "singular": "Quesataco"
+    },
+    {
+      "name": "Quesadillas",
+      "singular": "Quesadilla"
+    },
+    {
+      "name": "Tortas",
+      "singular": "Torta"
+    },
+    {
+      "name": "Burritos",
+      "singular": "Burrito"
+    },
+    {
+      "name": "Vampiros",
+      "singular": "Vampiro"
+    },
+    {
+      "name": "Bebidas",
+      "freeExtras": false
+    },
+    {
+      "name": "Órdenes",
+      "singular": "Orden de",
+      "byAmount": true,
+      "freeExtras": false
+    }
+  ],
+  "products": [
+    {
+      "id": "tacos-asada",
+      "name": "Asada",
+      "priceCents": 3500,
+      "category": "Tacos",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "color": "GRAY",
+      "variants": [
+        {
+          "name": "Maíz",
+          "priceCents": 3500
+        },
+        {
+          "name": "Harina",
+          "priceCents": 10000
+        }
+      ]
+    },
+    {
+      "id": "tacos-adobada",
+      "name": "Adobada",
+      "priceCents": 3000,
+      "category": "Tacos",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "color": "RED",
+      "variants": [
+        {
+          "name": "Maíz",
+          "priceCents": 3000
+        },
+        {
+          "name": "Harina",
+          "priceCents": 10000
+        }
+      ]
+    },
+    {
+      "id": "tacos-suadero",
+      "name": "Suadero",
+      "priceCents": 3500,
+      "category": "Tacos",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "color": "BROWN",
+      "variants": [
+        {
+          "name": "Maíz",
+          "priceCents": 3500
+        },
+        {
+          "name": "Harina",
+          "priceCents": 10000
+        }
+      ]
+    },
+    {
+      "id": "tacos-cabeza",
+      "name": "Cabeza",
+      "priceCents": 3500,
+      "category": "Tacos",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "variants": [
+        {
+          "name": "Maíz",
+          "priceCents": 3500
+        },
+        {
+          "name": "Harina",
+          "priceCents": 10000
+        }
+      ]
+    },
+    {
+      "id": "tacos-tripa",
+      "name": "Tripa",
+      "priceCents": 3500,
+      "category": "Tacos",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "variants": [
+        {
+          "name": "Maíz",
+          "priceCents": 3500
+        }
+      ]
+    },
+    {
+      "id": "tacos-mixto",
+      "name": "Mixto",
+      "priceCents": 3500,
+      "category": "Tacos",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "variants": [
+        {
+          "name": "Maíz",
+          "priceCents": 3500
+        },
+        {
+          "name": "Harina",
+          "priceCents": 10000
+        }
+      ],
+      "mix": true
+    },
+    {
+      "id": "quesatacos-asada",
+      "name": "Asada",
+      "priceCents": 4500,
+      "category": "Quesatacos",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "color": "GRAY"
+    },
+    {
+      "id": "quesatacos-adobada",
+      "name": "Adobada",
+      "priceCents": 4500,
+      "category": "Quesatacos",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "color": "RED"
+    },
+    {
+      "id": "quesatacos-suadero",
+      "name": "Suadero",
+      "priceCents": 4500,
+      "category": "Quesatacos",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "color": "BROWN"
+    },
+    {
+      "id": "quesatacos-cabeza",
+      "name": "Cabeza",
+      "priceCents": 4500,
+      "category": "Quesatacos",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ]
+    },
+    {
+      "id": "quesatacos-mixto",
+      "name": "Mixto",
+      "priceCents": 4500,
+      "category": "Quesatacos",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "mix": true
+    },
+    {
+      "id": "quesadillas-asada",
+      "name": "Asada",
+      "priceCents": 9000,
+      "category": "Quesadillas",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "color": "GRAY"
+    },
+    {
+      "id": "quesadillas-adobada",
+      "name": "Adobada",
+      "priceCents": 9000,
+      "category": "Quesadillas",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "color": "RED"
+    },
+    {
+      "id": "quesadillas-suadero",
+      "name": "Suadero",
+      "priceCents": 9000,
+      "category": "Quesadillas",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "color": "BROWN"
+    },
+    {
+      "id": "quesadillas-cabeza",
+      "name": "Cabeza",
+      "priceCents": 9000,
+      "category": "Quesadillas",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ]
+    },
+    {
+      "id": "quesadillas-mixto",
+      "name": "Mixto",
+      "priceCents": 9000,
+      "category": "Quesadillas",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "mix": true
+    },
+    {
+      "id": "tortas-asada",
+      "name": "Asada",
+      "priceCents": 8000,
+      "category": "Tortas",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "color": "GRAY",
+      "variants": [
+        {
+          "name": "Sencilla",
+          "priceCents": 8000
+        },
+        {
+          "name": "Con queso",
+          "priceCents": 10000
+        }
+      ]
+    },
+    {
+      "id": "tortas-adobada",
+      "name": "Adobada",
+      "priceCents": 8000,
+      "category": "Tortas",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "color": "RED",
+      "variants": [
+        {
+          "name": "Sencilla",
+          "priceCents": 8000
+        },
+        {
+          "name": "Con queso",
+          "priceCents": 10000
+        }
+      ]
+    },
+    {
+      "id": "tortas-suadero",
+      "name": "Suadero",
+      "priceCents": 8000,
+      "category": "Tortas",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "color": "BROWN",
+      "variants": [
+        {
+          "name": "Sencilla",
+          "priceCents": 8000
+        },
+        {
+          "name": "Con queso",
+          "priceCents": 10000
+        }
+      ]
+    },
+    {
+      "id": "tortas-cabeza",
+      "name": "Cabeza",
+      "priceCents": 8000,
+      "category": "Tortas",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "variants": [
+        {
+          "name": "Sencilla",
+          "priceCents": 8000
+        },
+        {
+          "name": "Con queso",
+          "priceCents": 10000
+        }
+      ]
+    },
+    {
+      "id": "tortas-mixto",
+      "name": "Mixto",
+      "priceCents": 8000,
+      "category": "Tortas",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "variants": [
+        {
+          "name": "Sencilla",
+          "priceCents": 8000
+        },
+        {
+          "name": "Con queso",
+          "priceCents": 10000
+        }
+      ],
+      "mix": true
+    },
+    {
+      "id": "burritos-asada",
+      "name": "Asada",
+      "priceCents": 18000,
+      "category": "Burritos",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "color": "GRAY"
+    },
+    {
+      "id": "burritos-adobada",
+      "name": "Adobada",
+      "priceCents": 18000,
+      "category": "Burritos",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "color": "RED"
+    },
+    {
+      "id": "burritos-suadero",
+      "name": "Suadero",
+      "priceCents": 18000,
+      "category": "Burritos",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "color": "BROWN"
+    },
+    {
+      "id": "burritos-cabeza",
+      "name": "Cabeza",
+      "priceCents": 18000,
+      "category": "Burritos",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ]
+    },
+    {
+      "id": "burritos-mixto",
+      "name": "Mixto",
+      "priceCents": 18000,
+      "category": "Burritos",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "mix": true
+    },
+    {
+      "id": "vampiros-asada",
+      "name": "Asada",
+      "priceCents": 5000,
+      "category": "Vampiros",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "color": "GRAY"
+    },
+    {
+      "id": "vampiros-adobada",
+      "name": "Adobada",
+      "priceCents": 5000,
+      "category": "Vampiros",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "color": "RED"
+    },
+    {
+      "id": "vampiros-suadero",
+      "name": "Suadero",
+      "priceCents": 5000,
+      "category": "Vampiros",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "color": "BROWN"
+    },
+    {
+      "id": "vampiros-cabeza",
+      "name": "Cabeza",
+      "priceCents": 5000,
+      "category": "Vampiros",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ]
+    },
+    {
+      "id": "vampiros-mixto",
+      "name": "Mixto",
+      "priceCents": 5000,
+      "category": "Vampiros",
+      "modifierGroupIds": [
+        "g-va",
+        "g-ajustes",
+        "g-mayonesa"
+      ],
+      "mix": true
+    },
+    {
+      "id": "bebidas-refresco",
+      "name": "Refresco",
+      "priceCents": 3000,
+      "category": "Bebidas",
+      "modifierGroupIds": [
+        "g-hielo"
+      ]
+    },
+    {
+      "id": "bebidas-agua-de-sabor",
+      "name": "Agua de sabor",
+      "priceCents": 3000,
+      "category": "Bebidas",
+      "modifierGroupIds": [
+        "g-hielo"
+      ]
+    },
+    {
+      "id": "ordenes-asada",
+      "name": "Asada",
+      "priceCents": 0,
+      "category": "Órdenes",
+      "color": "GRAY"
+    },
+    {
+      "id": "ordenes-adobada",
+      "name": "Adobada",
+      "priceCents": 0,
+      "category": "Órdenes",
+      "color": "RED"
+    },
+    {
+      "id": "ordenes-suadero",
+      "name": "Suadero",
+      "priceCents": 0,
+      "category": "Órdenes",
+      "color": "BROWN"
+    },
+    {
+      "id": "ordenes-cabeza",
+      "name": "Cabeza",
+      "priceCents": 0,
+      "category": "Órdenes"
+    }
+  ],
+  "modifierGroups": [
+    {
+      "id": "g-va",
+      "name": "Va",
+      "options": [
+        "Con todo",
+        "Puro verde",
+        "Pura salsa",
+        "Pura carne"
+      ],
+      "defaultOption": "Con todo",
+      "implies": {
+        "Puro verde": [
+          "Sin salsa",
+          "Sin cebolla",
+          "Sin cilantro"
+        ],
+        "Pura salsa": [
+          "Sin cebolla",
+          "Sin cilantro",
+          "Sin aguacate",
+          "Sin mayonesa"
+        ],
+        "Pura carne": [
+          "Sin salsa",
+          "Sin cebolla",
+          "Sin cilantro",
+          "Sin aguacate",
+          "Sin mayonesa"
+        ]
+      }
+    },
+    {
+      "id": "g-ajustes",
+      "name": "Ajustes",
+      "options": [
+        "Sin salsa",
+        "Sin cebolla",
+        "Sin cilantro",
+        "Sin aguacate"
+      ],
+      "exclusive": false
+    },
+    {
+      "id": "g-mayonesa",
+      "name": "Mayonesa",
+      "options": [
+        "Sin mayonesa",
+        "Con mayonesa"
+      ]
+    },
+    {
+      "id": "g-hielo",
+      "name": "Hielo",
+      "options": [
+        "Con hielo",
+        "Sin hielo"
+      ]
+    }
+  ],
+  "freeExtras": [
+    "Cebollitas",
+    "Chiles",
+    "Tostadas"
+  ]
+}

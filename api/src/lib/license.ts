@@ -17,6 +17,8 @@ export interface LicenseClient {
   product: {
     key: string;
     name: string;
+    terms?: unknown;
+    features?: unknown;
     latestVersionCode?: number | null;
     latestVersionName?: string | null;
     latestUrl?: string | null;
@@ -27,7 +29,8 @@ export interface LicenseClient {
 export interface LicenseBody {
   status: "ACTIVE" | "SUSPENDED";
   tenant: { name: string };
-  product: { key: string; name: string };
+  /** Desde la versión multi-negocio también trae las palabras y partes del giro (las apps viejas las ignoran). */
+  product: { key: string; name: string; terms: Record<string, unknown>; features: Record<string, unknown> };
   plan: { name: string } | null;
   nextDueDate: string | null;
   validUntil: string;
@@ -36,16 +39,33 @@ export interface LicenseBody {
   limits: { kitchens: number | null; waiters: number | null };
   /** Última versión publicada de la app; la app avisa si la suya es menor. */
   latestApp: { versionCode: number; versionName: string; url: string | null; notes: string | null } | null;
+  /** Set de iconos del giro: la app lo baja de `GET /icon-set` cuando cambia la versión. */
+  iconSet: { id: string; version: number } | null;
+  /** Versión vigente del menú en la Central (null = todavía no tiene). */
+  catalog: { version: number } | null;
 }
+
+/** Lo que cambia sin tocar el contrato viejo: set de iconos y versión del menú. */
+export interface LicenseExtras {
+  iconSet: { id: string; version: number } | null;
+  catalogVersion: number | null;
+}
+
+const objectOr = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 
 /**
  * Cuerpo de `GET /license` (mismo contrato de siempre). Puro a propósito: las
  * fechas de validez se calculan con `licenseValidUntil` y se prueban sin BD.
  */
-export const licenseBody = (t: LicenseClient, nextDueDate: Date | null, now: Date): LicenseBody => ({
+export const licenseBody = (
+  t: LicenseClient,
+  nextDueDate: Date | null,
+  now: Date,
+  extras: LicenseExtras = { iconSet: null, catalogVersion: null }
+): LicenseBody => ({
   status: t.status,
   tenant: { name: t.name },
-  product: { key: t.product.key, name: t.product.name },
+  product: { key: t.product.key, name: t.product.name, terms: objectOr(t.product.terms), features: objectOr(t.product.features) },
   plan: t.plan ? { name: t.plan.name } : null,
   nextDueDate: nextDueDate ? nextDueDate.toISOString().slice(0, 10) : null,
   validUntil: licenseValidUntil(now, t.status, nextDueDate).toISOString(),
@@ -60,6 +80,8 @@ export const licenseBody = (t: LicenseClient, nextDueDate: Date | null, now: Dat
           notes: t.product.latestNotes ?? null,
         }
       : null,
+  iconSet: extras.iconSet,
+  catalog: extras.catalogVersion != null ? { version: extras.catalogVersion } : null,
 });
 
 /** Dispositivo dueño de un código de activación, con su cliente, plan y producto. */
@@ -92,9 +114,19 @@ export const nextDueDateOf = async (clientId: string): Promise<Date | null> => {
  * con `POST /activate` para no duplicar lógica (contrato §5.2).
  */
 export const licensePayload = async (device: LicenseDevice, now: Date, appVersion?: string): Promise<LicenseBody> => {
-  const [nextDueDate] = await Promise.all([
+  const [nextDueDate, , extras] = await Promise.all([
     nextDueDateOf(device.clientId),
     db.device.update({ where: { id: device.id }, data: { lastSeenAt: now, appVersion } }),
+    licenseExtrasOf(device.clientId, device.client.product.iconSetId),
   ]);
-  return licenseBody(device.client, nextDueDate, now);
+  return licenseBody(device.client, nextDueDate, now, extras);
+};
+
+/** Set de iconos del giro y versión del menú del cliente: lo mismo en `/license`, `/activate` y `/app`. */
+export const licenseExtrasOf = async (clientId: string, iconSetId: string | null | undefined): Promise<LicenseExtras> => {
+  const [iconSet, catalog] = await Promise.all([
+    iconSetId ? db.iconSet.findUnique({ where: { id: iconSetId }, select: { id: true, version: true } }) : null,
+    db.catalogVersion.findFirst({ where: { clientId }, orderBy: { version: "desc" }, select: { version: true } }),
+  ]);
+  return { iconSet, catalogVersion: catalog?.version ?? null };
 };

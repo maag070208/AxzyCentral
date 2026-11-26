@@ -15,13 +15,16 @@ test("licencia activa con cobro pendiente: mismo contrato de siempre", () => {
   assert.deepEqual(body, {
     status: "ACTIVE",
     tenant: { name: "Tacos El Güero" },
-    product: { key: "TAQUERIA", name: "Taquería" },
+    // terms/features, iconSet y catalog son agregados: la 1.2.x los ignora y lee lo demás igual.
+    product: { key: "TAQUERIA", name: "Taquería", terms: {}, features: {} },
     plan: { name: "Básico" },
     nextDueDate: "2026-12-01",
     validUntil: new Date("2026-12-06T00:00:00.000Z").toISOString(),
     serverTime: now.toISOString(),
     limits: { kitchens: null, waiters: null },
     latestApp: null,
+    iconSet: null,
+    catalog: null,
   });
 });
 

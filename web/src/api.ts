@@ -21,6 +21,66 @@ export interface Product {
   plans?: number;
   /** Última versión publicada de la app; la app avisa si la suya es menor. */
   latestApp?: LatestApp | null;
+  /** Palabras del giro (Taquero/Sushero…); lo que falte, la app lo toma de la taquería. */
+  terms?: GiroTerms;
+  /** Partes del modelo que usa el giro. */
+  features?: GiroFeatures;
+  /** Set de iconos asignado (resumen). */
+  iconSet?: { id: string; name: string; version: number; icons: number } | null;
+  /** Menú base para clientes nuevos (conteos). */
+  template?: { categories: number; products: number } | null;
+}
+
+export interface GiroTerms {
+  kitchenRole?: string;
+  waiterRole?: string;
+  item?: string;
+  kitchen?: string;
+}
+
+export interface GiroFeatures {
+  mixes?: boolean;
+  meatColors?: boolean;
+  freeExtras?: boolean;
+}
+
+/** Set de iconos en la lista (`GET /icon-sets`). */
+export interface IconSetSummary {
+  id: string;
+  name: string;
+  version: number;
+  hasLogo: boolean;
+  hasAppIcon: boolean;
+  icons: number;
+  products: number;
+  updatedAt: string;
+}
+
+export interface IconItem {
+  key: string;
+  group: string;
+  label: string;
+  /** PNG en base64. */
+  png: string;
+}
+
+/** Set completo (`GET /icon-sets/:id`). */
+export interface IconSetFull {
+  id: string;
+  name: string;
+  version: number;
+  logo: string | null;
+  appIcon: string | null;
+  icons: IconItem[];
+}
+
+/** Resultado de subir un kit (`PUT /icon-sets/:id/icons`). */
+export interface IconUploadResult {
+  version: number;
+  added: string[];
+  changed: string[];
+  removed: string[];
+  logoChanged: boolean;
 }
 
 export interface LatestApp {
@@ -101,6 +161,21 @@ export interface ClientSummary {
   devices: { total: number; active: number };
   lastSeenAt: string | null;
   createdAt: string;
+  menu: DigitalMenu;
+}
+
+/** Datos del local que se ven en el menú digital. */
+export interface DigitalMenuInfo {
+  hours?: string | null;
+  whatsapp?: string | null;
+  address?: string | null;
+}
+
+/** Menú digital público del cliente (`<menuUrl>/<slug>`). */
+export interface DigitalMenu {
+  slug: string | null;
+  enabled: boolean;
+  info: DigitalMenuInfo;
 }
 
 export interface ClientDetail extends Omit<ClientSummary, "devices"> {
@@ -141,7 +216,24 @@ export interface BillingRun {
 
 export interface ApiConfig {
   apiUrl: string;
+  /** Base del menú digital; el QR de las mesas lleva `<menuUrl>/<slug>`. */
+  menuUrl: string;
 }
+
+/** Guarda el menú digital del cliente; la API no lo enciende sin dirección ni repite direcciones. */
+export const saveDigitalMenu = (clientId: string, patch: { menuSlug?: string | null; menuEnabled?: boolean; menuInfo?: DigitalMenuInfo }) =>
+  api<ClientDetail>("PATCH", `/clients/${clientId}`, patch);
+
+/** Dirección sugerida a partir del nombre: "Pizzas Don Luigi" → `pizzas-don-luigi`. */
+export const suggestMenuSlug = (name: string) =>
+  name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60)
+    .replace(/-+$/g, "");
 
 /** Respuesta de crear/rotar el código de un dispositivo. */
 export interface IssuedDevice {
@@ -445,3 +537,111 @@ export const planLimits = (p: Pick<Plan, "maxKitchens" | "maxWaiters">) => {
   const w = p.maxWaiters == null ? "meseras ilimitadas" : `${p.maxWaiters} ${p.maxWaiters === 1 ? "mesera" : "meseras"}`;
   return `${k} · ${w}`;
 };
+
+/* ------------------------------------------------------------------ */
+/* Giros: sets de iconos                                               */
+/* ------------------------------------------------------------------ */
+
+export const listIconSets = () => api<IconSetSummary[]>("GET", "/icon-sets");
+export const createIconSet = (name: string) => api<IconSetSummary>("POST", "/icon-sets", { name });
+export const getIconSet = (id: string, previewCount?: number) =>
+  api<IconSetFull>("GET", `/icon-sets/${id}${previewCount ? `?icons=${previewCount}` : ""}`);
+export const renameIconSet = (id: string, name: string) => api<IconSetSummary>("PATCH", `/icon-sets/${id}`, { name });
+export const deleteIconSet = (id: string) => api<void>("DELETE", `/icon-sets/${id}`);
+export const uploadIconSet = (
+  id: string,
+  kit: { icons: { key: string; png: string }[]; logo?: string | null; appIcon?: string | null }
+) => api<IconUploadResult>("PUT", `/icon-sets/${id}/icons`, kit);
+
+/** `src` de un PNG en base64. */
+export const pngSrc = (base64: string) => `data:image/png;base64,${base64}`;
+
+/* ---------------- Menú del cliente (catalog_versions) ---------------- */
+
+/** Presentación con precio propio (Normal, Empanizado, Chica…). */
+export interface MenuVariant {
+  name: string;
+  priceCents: number;
+}
+
+/** Producto tal como lo guarda la app (`Product` en Model.kt). */
+export interface MenuProduct {
+  id: string;
+  name: string;
+  priceCents: number;
+  category: string;
+  active?: boolean;
+  emoji?: string;
+  modifierGroupIds?: string[];
+  color?: string;
+  variants?: MenuVariant[];
+  mix?: boolean;
+  icon?: string | null;
+  [extra: string]: unknown;
+}
+
+export interface MenuCategory {
+  name: string;
+  singular?: string;
+  byAmount?: boolean;
+  freeExtras?: boolean;
+  [extra: string]: unknown;
+}
+
+export interface MenuModifierGroup {
+  id: string;
+  name: string;
+  options: string[];
+  exclusive?: boolean;
+  [extra: string]: unknown;
+}
+
+export interface MenuData {
+  categories: MenuCategory[];
+  products: MenuProduct[];
+  modifierGroups: MenuModifierGroup[];
+  freeExtras: string[];
+  stations: unknown[];
+  [extra: string]: unknown;
+}
+
+export interface MenuVersion {
+  version: number;
+  source: "central" | "cocina" | string;
+  author: string;
+  updatedAt: string;
+  data: MenuData;
+}
+
+export interface MenuHistoryItem {
+  version: number;
+  source: string;
+  author: string;
+  createdAt: string;
+  sizeBytes: number;
+}
+
+export interface ClientMenu {
+  giro: { id: string; key: string; name: string; features: GiroFeatures; iconSetId: string | null; hasTemplate: boolean };
+  current: MenuVersion | null;
+  history: MenuHistoryItem[];
+}
+
+export const getClientMenu = (clientId: string) => api<ClientMenu>("GET", `/clients/${clientId}/catalog`);
+export const getClientMenuVersion = (clientId: string, version: number) =>
+  api<MenuVersion>("GET", `/clients/${clientId}/catalog/${version}`);
+export const saveClientMenu = (clientId: string, baseVersion: number, data: MenuData) =>
+  api<{ saved: boolean; catalog: MenuVersion }>("PUT", `/clients/${clientId}/catalog`, { baseVersion, data });
+
+/** Plantillas de menú que trae la Central (Taquería, Sushi, Pizzería). */
+export interface MenuTemplateSummary {
+  key: string;
+  name: string;
+  categories: number;
+  products: number;
+}
+
+export const listMenuTemplates = () => api<MenuTemplateSummary[]>("GET", "/menu-templates");
+export const getMenuTemplate = (key: string) => api<{ key: string; name: string; data: MenuData }>("GET", `/menu-templates/${key}`);
+/** Menú base del giro (el que recibe cada cliente nuevo); null si no tiene. */
+export const getGiroTemplate = (productId: string) => api<{ template: MenuData | null }>("GET", `/products/${productId}/template`);

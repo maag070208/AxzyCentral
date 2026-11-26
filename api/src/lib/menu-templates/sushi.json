@@ -1,0 +1,271 @@
+{
+  "categories": [
+    {
+      "name": "Rollos",
+      "singular": "Rollo"
+    },
+    {
+      "name": "Nigiri y más"
+    },
+    {
+      "name": "Entradas",
+      "freeExtras": false
+    },
+    {
+      "name": "Bebidas",
+      "freeExtras": false
+    }
+  ],
+  "products": [
+    {
+      "id": "rollos-california",
+      "name": "California",
+      "priceCents": 13500,
+      "category": "Rollos",
+      "icon": "rollo_california",
+      "modifierGroupIds": [
+        "g-preparacion",
+        "g-quitar",
+        "g-salsas"
+      ]
+    },
+    {
+      "id": "rollos-philadelphia",
+      "name": "Philadelphia",
+      "priceCents": 14000,
+      "category": "Rollos",
+      "icon": "rollo_philadelphia",
+      "modifierGroupIds": [
+        "g-preparacion",
+        "g-quitar",
+        "g-salsas"
+      ]
+    },
+    {
+      "id": "rollos-dragon",
+      "name": "Dragón",
+      "priceCents": 16500,
+      "category": "Rollos",
+      "icon": "rollo_dragon",
+      "modifierGroupIds": [
+        "g-preparacion",
+        "g-quitar",
+        "g-salsas"
+      ]
+    },
+    {
+      "id": "rollos-tempura",
+      "name": "Tempura",
+      "priceCents": 14500,
+      "category": "Rollos",
+      "icon": "rollo_tempura",
+      "modifierGroupIds": [
+        "g-preparacion",
+        "g-quitar",
+        "g-salsas"
+      ]
+    },
+    {
+      "id": "rollos-spicy",
+      "name": "Spicy",
+      "priceCents": 15000,
+      "category": "Rollos",
+      "icon": "rollo_spicy",
+      "modifierGroupIds": [
+        "g-preparacion",
+        "g-quitar",
+        "g-salsas"
+      ]
+    },
+    {
+      "id": "rollos-mar-y-tierra",
+      "name": "Mar y tierra",
+      "priceCents": 16000,
+      "category": "Rollos",
+      "icon": "rollo_mar_y_tierra",
+      "modifierGroupIds": [
+        "g-preparacion",
+        "g-quitar",
+        "g-salsas"
+      ]
+    },
+    {
+      "id": "rollos-pepino",
+      "name": "Pepino",
+      "priceCents": 12000,
+      "category": "Rollos",
+      "icon": "rollo_pepino",
+      "modifierGroupIds": [
+        "g-preparacion",
+        "g-quitar",
+        "g-salsas"
+      ]
+    },
+    {
+      "id": "rollos-rollo-del-dia",
+      "name": "Rollo del día",
+      "priceCents": 13000,
+      "category": "Rollos",
+      "icon": "rollo_del_dia",
+      "modifierGroupIds": [
+        "g-preparacion",
+        "g-quitar",
+        "g-salsas"
+      ]
+    },
+    {
+      "id": "nigiri-y-mas-nigiri-de-salmon",
+      "name": "Nigiri de salmón",
+      "priceCents": 7500,
+      "category": "Nigiri y más",
+      "icon": "sushi_nigiri",
+      "variants": [
+        {
+          "name": "2 piezas",
+          "priceCents": 7500
+        },
+        {
+          "name": "4 piezas",
+          "priceCents": 14000
+        }
+      ]
+    },
+    {
+      "id": "nigiri-y-mas-sashimi",
+      "name": "Sashimi",
+      "priceCents": 16000,
+      "category": "Nigiri y más",
+      "icon": "sushi_sashimi",
+      "variants": [
+        {
+          "name": "Salmón",
+          "priceCents": 16000
+        },
+        {
+          "name": "Atún",
+          "priceCents": 17000
+        }
+      ]
+    },
+    {
+      "id": "nigiri-y-mas-temaki",
+      "name": "Temaki",
+      "priceCents": 9500,
+      "category": "Nigiri y más",
+      "icon": "sushi_temaki",
+      "modifierGroupIds": [
+        "g-quitar"
+      ]
+    },
+    {
+      "id": "nigiri-y-mas-onigiri",
+      "name": "Onigiri",
+      "priceCents": 6000,
+      "category": "Nigiri y más",
+      "icon": "sushi_onigiri"
+    },
+    {
+      "id": "entradas-gyozas",
+      "name": "Gyozas",
+      "priceCents": 8500,
+      "category": "Entradas",
+      "icon": "sushi_gyoza",
+      "variants": [
+        {
+          "name": "Al vapor",
+          "priceCents": 8500
+        },
+        {
+          "name": "Fritas",
+          "priceCents": 8500
+        }
+      ]
+    },
+    {
+      "id": "entradas-edamames",
+      "name": "Edamames",
+      "priceCents": 6500,
+      "category": "Entradas",
+      "icon": "ing_edamame"
+    },
+    {
+      "id": "bebidas-te-verde",
+      "name": "Té verde",
+      "priceCents": 3500,
+      "category": "Bebidas",
+      "icon": "extra_te_verde",
+      "modifierGroupIds": [
+        "g-hielo"
+      ]
+    },
+    {
+      "id": "bebidas-refresco",
+      "name": "Refresco",
+      "priceCents": 3500,
+      "category": "Bebidas",
+      "modifierGroupIds": [
+        "g-hielo"
+      ]
+    },
+    {
+      "id": "bebidas-cerveza",
+      "name": "Cerveza",
+      "priceCents": 6000,
+      "category": "Bebidas",
+      "icon": "extra_cerveza"
+    },
+    {
+      "id": "bebidas-sake",
+      "name": "Sake",
+      "priceCents": 9000,
+      "category": "Bebidas",
+      "icon": "extra_sake"
+    }
+  ],
+  "modifierGroups": [
+    {
+      "id": "g-preparacion",
+      "name": "Preparación",
+      "options": [
+        "Natural",
+        "Empanizado"
+      ],
+      "defaultOption": "Natural"
+    },
+    {
+      "id": "g-quitar",
+      "name": "Quitar",
+      "options": [
+        "Sin queso crema",
+        "Sin aguacate",
+        "Sin ajonjolí",
+        "Sin picante"
+      ],
+      "exclusive": false
+    },
+    {
+      "id": "g-salsas",
+      "name": "Salsas",
+      "options": [
+        "Anguila",
+        "Spicy mayo",
+        "Salsas aparte"
+      ],
+      "exclusive": false
+    },
+    {
+      "id": "g-hielo",
+      "name": "Hielo",
+      "options": [
+        "Con hielo",
+        "Sin hielo"
+      ]
+    }
+  ],
+  "freeExtras": [
+    "Soya",
+    "Wasabi",
+    "Jengibre",
+    "Palillos"
+  ]
+}
