@@ -37,7 +37,7 @@ const findMenu = (slug: string) =>
           id: true,
           name: true,
           menuInfo: true,
-          product: { select: { name: true, features: true, iconSetId: true } },
+          product: { select: { key: true, name: true, features: true, iconSetId: true } },
           devices: { where: { active: true }, select: { lastSeenAt: true } },
         },
       })
@@ -77,6 +77,7 @@ publicMenuRouter.get(
       basePath: `${req.baseUrl}/${req.params.slug}`,
       clientName: client.name,
       giroName: client.product.name,
+      giroKey: client.product.key,
       catalog: catalog.data as Record<string, unknown>,
       info: (client.menuInfo ?? {}) as MenuInfo,
       // Igual que la app: lo que no está guardado cuenta como encendido.

@@ -14,6 +14,8 @@ export type PublicMenuInput = {
   basePath: string;
   clientName: string;
   giroName: string;
+  /** Clave del giro (`TAQUERIA`, `SUSHI`…): elige los colores de la carta. */
+  giroKey: string;
   /** Lo que la app llama `Catalog`: categorías, productos, grupos de opciones y extras gratis. */
   catalog: Json;
   info: MenuInfo;
@@ -101,6 +103,16 @@ const sections = (catalog: Json): Section[] => {
   return out.filter((s) => s.products.length);
 };
 
+/** Colores de cada giro: una carta con identidad propia, como las impresas. */
+type Theme = { hero: string; heroInk: string; kicker: string; paper: string; ink: string; muted: string; accent: string; gold: string; line: string };
+const THEMES: Record<string, Theme> = {
+  TAQUERIA: { hero: "#1F3B2D", heroInk: "#F6EFE3", kicker: "#E0A33A", paper: "#F6EFE3", ink: "#2B1E16", muted: "#7A6A5C", accent: "#C8462B", gold: "#E0A33A", line: "#E3D6C2" },
+  SUSHI: { hero: "#161616", heroInk: "#F4F1EA", kicker: "#C9A45C", paper: "#F4F1EA", ink: "#1B1B1B", muted: "#6E6A62", accent: "#B8312F", gold: "#C9A45C", line: "#DED8CC" },
+  PIZZERIA: { hero: "#B8322A", heroInk: "#FFF7EA", kicker: "#FFD7A1", paper: "#FBF4E6", ink: "#2A211C", muted: "#7B6B5E", accent: "#B8322A", gold: "#2F6B3A", line: "#EADBC4" },
+};
+const DEFAULT_THEME: Theme = { hero: "#2F7358", heroInk: "#F4F6F5", kicker: "#E0A33A", paper: "#F4F6F5", ink: "#1E2422", muted: "#6B7470", accent: "#2F7358", gold: "#E0A33A", line: "#DCE3E0" };
+export const themeOf = (giroKey: string) => THEMES[giroKey] ?? DEFAULT_THEME;
+
 const priceHtml = (p: Json, category: Json | undefined) => {
   const variants = list(p.variants).filter((v) => str(v.name));
   if (variants.length) {
@@ -108,6 +120,12 @@ const priceHtml = (p: Json, category: Json | undefined) => {
       .map((v) => `<li><span>${escapeHtml(str(v.name))}</span><b>${money(Number(v.priceCents) || 0)}</b></li>`)
       .join("")}</ul>`;
   }
+  return "";
+};
+
+/** Precio de una sola pieza, alineado a la derecha con puntos guía; con tamaños va abajo. */
+const singlePrice = (p: Json, category: Json | undefined) => {
+  if (list(p.variants).some((v) => str(v.name))) return "";
   const cents = Number(p.priceCents) || 0;
   if (cents > 0) return `<b class="price">${money(cents)}</b>`;
   return category?.byAmount ? `<span class="price muted">Por monto</span>` : "";
@@ -123,12 +141,17 @@ const optionsHtml = (ids: string[], groups: Map<string, Json>) => {
   return lines.length ? `<ul class="opts">${lines.join("")}</ul>` : "";
 };
 
+/** Remate de los títulos de sección: línea, rombo y línea. */
+const ORNAMENT = `<svg class="orn" viewBox="0 0 120 12" aria-hidden="true"><path d="M0 6h50M70 6h50" stroke="currentColor" stroke-width="1"/><path d="M60 1l5 5-5 5-5-5z" fill="currentColor"/></svg>`;
+
 export const renderMenu = (m: PublicMenuInput): string => {
   const now = m.now ?? new Date();
   const keys = [...m.icons.keys()];
   const groups = new Map(list(m.catalog.modifierGroups).map((g) => [str(g.id), g]));
   const secs = sections(m.catalog);
   const base = m.basePath;
+  const t = themeOf(m.giroKey);
+  const iconUrl = (key: string) => `${base}/i/${key}.png?v=${m.icons.get(key)!.slice(0, 12)}`;
 
   /** Si todos los productos de la sección tienen las mismas opciones, se dicen una vez arriba. */
   const sharedOptions = (s: Section) => {
@@ -141,31 +164,32 @@ export const renderMenu = (m: PublicMenuInput): string => {
       .map((p) => {
         const soldOut = p.active === false;
         const key = iconFor(p, s.category, keys);
-        // Sin set de iconos no se deja un cuadro vacío; con set, el cuadro mantiene la columna alineada.
-        const img = key
-          ? `<img src="${base}/i/${key}.png?v=${m.icons.get(key)!.slice(0, 12)}" alt="" width="56" height="56" loading="lazy">`
-          : keys.length
-            ? `<span class="noimg"></span>`
-            : "";
-        return `<li class="item${soldOut ? " out" : ""}">${img}<div class="body"><div class="row"><h3>${escapeHtml(str(p.name))}</h3>${
+        const img = key ? `<img src="${iconUrl(key)}" alt="" width="52" height="52" loading="lazy">` : "";
+        return `<li class="item${soldOut ? " out" : ""}${img ? "" : " noicon"}">${img}<div class="body"><div class="line"><h3>${escapeHtml(str(p.name))}</h3>${
           soldOut ? `<span class="tag">Agotado</span>` : ""
-        }</div>${priceHtml(p, s.category)}${shared ? "" : optionsHtml(groupIds(p), groups)}</div></li>`;
+        }${((price) => (price ? `<span class="dots"></span>${price}` : ""))(singlePrice(p, s.category))}</div>${priceHtml(p, s.category)}${shared ? "" : optionsHtml(groupIds(p), groups)}</div></li>`;
       })
       .join("");
 
   const section = (s: Section) => {
     const shared = sharedOptions(s);
     const opts = shared ? optionsHtml(shared, groups).replace('class="opts"', 'class="opts shared"') : "";
-    return `<section id="${s.id}"><h2>${escapeHtml(s.name)}</h2>${opts}<ul class="items">${items(s, !!shared)}</ul></section>`;
+    return `<section id="${s.id}"><div class="sec"><h2>${escapeHtml(s.name)}</h2>${ORNAMENT}</div>${opts}<ul class="items">${items(s, !!shared)}</ul></section>`;
   };
+
+  // Ilustración de la portada: tres dibujos del menú, como en las cartas impresas.
+  const heroArt = [...new Set(secs.flatMap((s) => s.products.map((p) => iconFor(p, s.category, keys))).filter((k): k is string => !!k))]
+    .slice(0, 3)
+    .map((k, i) => `<img class="art a${i}" src="${iconUrl(k)}" alt="" width="128" height="128">`)
+    .join("");
 
   const freeList = m.freeExtras && Array.isArray(m.catalog.freeExtras) ? m.catalog.freeExtras.map(String).filter(Boolean) : [];
 
   const info: string[] = [];
-  if (m.info.hours) info.push(`<li>🕒 ${escapeHtml(m.info.hours)}</li>`);
-  if (m.info.address) info.push(`<li>📍 ${escapeHtml(m.info.address)}</li>`);
+  if (m.info.hours) info.push(`<li>${escapeHtml(m.info.hours)}</li>`);
+  if (m.info.address) info.push(`<li>${escapeHtml(m.info.address)}</li>`);
   const wa = m.info.whatsapp ? waLink(m.info.whatsapp) : null;
-  if (wa) info.push(`<li><a href="${wa}" rel="noopener">💬 WhatsApp ${escapeHtml(m.info.whatsapp!)}</a></li>`);
+  if (wa) info.push(`<li><a href="${wa}" rel="noopener">WhatsApp ${escapeHtml(m.info.whatsapp!)}</a></li>`);
 
   const stale = m.lastSeenAt && now.getTime() - m.lastSeenAt.getTime() > STALE_MS;
 
@@ -174,65 +198,86 @@ export const renderMenu = (m: PublicMenuInput): string => {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="${t.hero}">
 <title>${escapeHtml(m.clientName)} · Menú</title>
 <meta name="description" content="Menú de ${escapeHtml(m.clientName)}">
 <style>
-:root{--bg:#F4F6F5;--card:#fff;--line:#E6EAE8;--soft:#E8F2EE;--primary:#3F8F6F;--text:#1E2422;--muted:#6B7470;--late:#C8432F}
-@media (prefers-color-scheme:dark){:root{--bg:#121614;--card:#1B201E;--line:#2A312E;--soft:#1F2D27;--primary:#6CC39F;--text:#E8EDEA;--muted:#9AA39F;--late:#F07A66}}
+:root{--hero:${t.hero};--hero-ink:${t.heroInk};--kicker:${t.kicker};--paper:${t.paper};--ink:${t.ink};--muted:${t.muted};--accent:${t.accent};--gold:${t.gold};--line:${t.line};
+--display:"Didot","Bodoni 72","Bodoni MT","Playfair Display","Noto Serif Display","Noto Serif",Georgia,serif;
+--cond:"Avenir Next Condensed","Roboto Condensed","Arial Narrow","sans-serif-condensed",system-ui,sans-serif;
+--text:"Avenir Next","Segoe UI",Roboto,system-ui,-apple-system,sans-serif}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-header{padding:24px 16px 8px;max-width:720px;margin:0 auto}
-h1{margin:0;font-size:28px;line-height:1.15}
-.giro{margin:4px 0 0;color:var(--muted)}
-.info{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:8px 16px;color:var(--muted);font-size:15px}
-.info a{color:var(--primary);font-weight:600;text-decoration:none}
-.stale{margin:12px 0 0;padding:8px 12px;border-radius:10px;background:var(--soft);font-size:14px}
-nav{position:sticky;top:0;z-index:1;background:var(--bg);border-bottom:1px solid var(--line)}
-nav ul{list-style:none;margin:0 auto;padding:10px 16px;display:flex;gap:8px;overflow-x:auto;max-width:720px;scrollbar-width:none}
-nav a{display:block;white-space:nowrap;padding:8px 14px;border-radius:999px;background:var(--card);border:1px solid var(--line);color:var(--text);text-decoration:none;font-weight:600;font-size:15px}
-main{max-width:720px;margin:0 auto;padding:8px 16px 32px}
-section{scroll-margin-top:64px}
-h2{margin:24px 0 8px;font-size:20px}
-.items{list-style:none;margin:0;padding:0;display:grid;gap:8px}
-.item{display:flex;gap:12px;padding:12px;background:var(--card);border:1px solid var(--line);border-radius:14px}
-.item img,.noimg{flex:none;width:56px;height:56px;border-radius:12px;background:var(--soft)}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.45 var(--text);-webkit-font-smoothing:antialiased}
+.hero{position:relative;overflow:hidden;background:var(--hero);color:var(--hero-ink);padding:40px 20px 36px}
+.hero::after{content:"";position:absolute;inset:auto 0 0;height:6px;background:repeating-linear-gradient(90deg,var(--gold) 0 18px,transparent 18px 26px)}
+.wrap{position:relative;max-width:820px;margin:0 auto}
+.kicker{margin:0;font:700 13px/1 var(--cond);letter-spacing:.28em;text-transform:uppercase;color:var(--kicker)}
+h1{margin:10px 0 0;max-width:58%;font:400 clamp(40px,11vw,72px)/.95 var(--display);letter-spacing:-.01em;overflow-wrap:anywhere}
+.menu-word{margin:14px 0 0;font:italic 400 22px/1 var(--display);opacity:.85}
+.info{list-style:none;margin:20px 0 0;padding:0;display:flex;flex-direction:column;gap:6px;max-width:60%;font:600 14px/1.3 var(--text);opacity:.92}
+@media (min-width:600px){.info{flex-direction:row;flex-wrap:wrap;gap:6px 22px;max-width:70%}}
+.info a{color:inherit}
+.art{position:absolute;width:128px;height:128px;filter:drop-shadow(0 8px 14px rgba(0,0,0,.25))}
+.a0{right:-18px;top:-14px;width:118px;height:118px;transform:rotate(-8deg)}
+.a1{right:58px;top:78px;width:76px;height:76px;transform:rotate(10deg)}
+.a2{right:-12px;top:112px;width:72px;height:72px;transform:rotate(-4deg)}
+@media (min-width:600px){.a0{right:-6px;top:-8px;width:170px;height:170px}.a1{right:120px;top:96px;width:116px;height:116px}.a2{right:-10px;top:150px;width:108px;height:108px}}
+.stale{max-width:820px;margin:16px auto 0;padding:10px 14px;border-left:3px solid var(--accent);background:rgba(0,0,0,.04);font-size:14px}
+nav{position:sticky;top:0;z-index:2;background:var(--paper);border-bottom:1px solid var(--line)}
+nav ul{list-style:none;margin:0 auto;padding:12px 20px;display:flex;gap:22px;overflow-x:auto;max-width:860px;scrollbar-width:none}
+nav ul::-webkit-scrollbar{display:none}
+nav a{display:block;white-space:nowrap;font:700 14px/1 var(--cond);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);text-decoration:none;padding:6px 0;border-bottom:2px solid transparent}
+nav a:hover,nav a:focus{color:var(--ink);border-color:var(--accent)}
+main{max-width:860px;margin:0 auto;padding:8px 20px 24px}
+section{scroll-margin-top:56px;padding-top:28px}
+.sec{text-align:center;margin-bottom:14px;color:var(--accent)}
+h2{margin:0;font:700 clamp(24px,6vw,30px)/1.05 var(--cond);letter-spacing:.16em;text-transform:uppercase;color:var(--ink)}
+.orn{display:block;width:120px;height:12px;margin:8px auto 0}
+.opts.shared{max-width:560px;margin:0 auto 14px;text-align:center;font-style:italic}
+.items{list-style:none;margin:0;padding:0;display:grid;gap:4px 40px}
+@media (min-width:760px){.items{grid-template-columns:1fr 1fr}}
+.item{display:flex;gap:14px;align-items:flex-start;padding:12px 0;border-bottom:1px dashed var(--line)}
+.item img{flex:none;width:52px;height:52px;border-radius:50%;background:rgba(0,0,0,.035);padding:3px}
 .body{flex:1;min-width:0}
-.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-h3{margin:0;font-size:17px}
-.price{display:block;margin-top:2px;color:var(--primary);font-size:17px}
-.muted{color:var(--muted);font-weight:400}
-.sizes{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:4px 16px}
-.sizes li{display:flex;gap:6px}
-.sizes b{color:var(--primary)}
-.opts{list-style:none;margin:6px 0 0;padding:0;color:var(--muted);font-size:14px}
-.opts span{color:var(--text)}
-.opts.shared{margin:-4px 0 10px}
+.line{display:flex;align-items:baseline;gap:8px}
+h3{margin:0;font:600 18px/1.2 var(--text);letter-spacing:.01em}
+.dots{flex:1;min-width:16px;border-bottom:2px dotted var(--line);transform:translateY(-4px)}
+.price{font:700 18px/1 var(--text);color:var(--accent);white-space:nowrap}
+.muted{color:var(--muted);font-weight:500;font-size:15px}
+.sizes{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:4px 18px;font-size:15px}
+.sizes li{display:flex;gap:6px;color:var(--muted)}
+.sizes b{color:var(--accent);font-weight:700}
+.opts{list-style:none;margin:6px 0 0;padding:0;color:var(--muted);font-size:14px;line-height:1.4}
+.opts span{color:var(--ink);font-weight:600;font-style:normal}
 .out h3{text-decoration:line-through;color:var(--muted)}
-.out img{opacity:.45;filter:grayscale(1)}
+.out img{opacity:.4;filter:grayscale(1)}
 .out .price,.out .sizes b{color:var(--muted)}
-.tag{padding:2px 8px;border-radius:999px;background:var(--late);color:#fff;font-size:12px;font-weight:700}
-.free{margin:24px 0 0;padding:12px;border-radius:14px;background:var(--soft);font-size:15px}
-footer{max-width:720px;margin:0 auto;padding:0 16px 32px;color:var(--muted);font-size:13px}
-.empty{padding:32px 0;color:var(--muted)}
+.tag{flex:none;padding:3px 8px;border-radius:4px;background:var(--accent);color:#fff;font:700 11px/1 var(--cond);letter-spacing:.12em;text-transform:uppercase}
+.free{margin:32px auto 0;max-width:560px;padding:16px 18px;text-align:center;border:1px solid var(--line);border-radius:4px;font-size:15px}
+.free b{font:700 13px/1 var(--cond);letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin-right:6px}
+footer{margin-top:24px;padding:28px 20px 36px;background:var(--hero);color:var(--hero-ink);text-align:center}
+footer .name{margin:0;font:400 26px/1.1 var(--display)}
+footer p{margin:6px 0 0;font-size:13px;opacity:.75}
+.empty{padding:40px 0;text-align:center;color:var(--muted)}
 </style>
 </head>
 <body>
-<header>
+<header class="hero">
+<div class="wrap">
+${heroArt}
+<p class="kicker">${escapeHtml(m.giroName)}</p>
 <h1>${escapeHtml(m.clientName)}</h1>
-<p class="giro">${escapeHtml(m.giroName)}</p>
+<p class="menu-word">Menú</p>
 ${info.length ? `<ul class="info">${info.join("")}</ul>` : ""}
-${stale ? `<p class="stale">Menú actualizado hace ${ago(now.getTime() - m.lastSeenAt!.getTime())}; puede haber cambios.</p>` : ""}
+</div>
 </header>
+${stale ? `<p class="stale">Menú actualizado hace ${ago(now.getTime() - m.lastSeenAt!.getTime())}; puede haber cambios.</p>` : ""}
 ${secs.length > 1 ? `<nav aria-label="Categorías"><ul>${secs.map((s) => `<li><a href="#${s.id}">${escapeHtml(s.name)}</a></li>`).join("")}</ul></nav>` : ""}
 <main>
-${
-  secs.length
-    ? secs.map(section).join("\n")
-    : `<p class="empty">Este menú todavía no tiene productos.</p>`
-}
-${freeList.length ? `<p class="free"><b>Sin costo:</b> ${escapeHtml(freeList.join(", "))}</p>` : ""}
+${secs.length ? secs.map(section).join("\n") : `<p class="empty">Este menú todavía no tiene productos.</p>`}
+${freeList.length ? `<p class="free"><b>Sin costo</b> ${escapeHtml(freeList.join(", "))}</p>` : ""}
 </main>
-<footer>Precios en pesos mexicanos. Pide a tu mesero.</footer>
+<footer><p class="name">${escapeHtml(m.clientName)}</p><p>Precios en pesos mexicanos · Pide a tu mesero</p></footer>
 </body>
 </html>`;
 };

@@ -132,7 +132,7 @@ test("menú digital: enseña el menú de la cocina, sus agotados e iconos, y nad
   assert.match(html, /\$25/);
   assert.match(html, /Tortilla:<\/span> Maíz, Harina/);
   assert.match(html, /Chica<\/span><b>\$20<\/b>/);
-  assert.match(html, /Sin costo:<\/b> Cebollitas, Chiles toreados/);
+  assert.match(html, /Sin costo<\/b> Cebollitas, Chiles toreados/);
   assert.match(html, /Lun a sáb, 7 pm a 1 am/);
   assert.match(html, /href="https:\/\/wa\.me\/525512345678"/);
   assert.doesNotMatch(html, /Agotado/);
@@ -156,7 +156,7 @@ test("menú digital: enseña el menú de la cocina, sus agotados e iconos, y nad
   // La cocina agota el suadero: en la siguiente sincronización la página lo tacha.
   assert.equal((await call("PUT", "/catalog", { auth: code, body: { baseVersion: 1, data: menu(false) } })).status, 200);
   const out = (await page("/m/el-guero")).html;
-  assert.match(out, /<li class="item out">.*?<h3>Suadero<\/h3><span class="tag">Agotado<\/span>/s);
+  assert.match(out, /<li class="item out[^"]*">.*?<h3>Suadero<\/h3><span class="tag">Agotado<\/span>/s);
 });
 
 test("menú digital: cuenta las visitas de comensales por día, no las vistas previas de enlaces", async () => {
