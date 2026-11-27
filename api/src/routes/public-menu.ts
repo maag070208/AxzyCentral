@@ -2,7 +2,9 @@ import { Router, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import { config } from "../config";
 import { db } from "../db";
-import { asyncHandler } from "../errors";
+import { z } from "zod";
+import { asyncHandler, HttpError } from "../errors";
+import { shaOf } from "../lib/giro";
 import { renderMenu, renderUnavailable, type MenuInfo } from "../lib/public-menu";
 
 /**
@@ -37,7 +39,7 @@ const findMenu = (slug: string) =>
           id: true,
           name: true,
           menuInfo: true,
-          product: { select: { name: true, features: true, iconSetId: true } },
+          product: { select: { key: true, name: true, features: true, iconSetId: true } },
           devices: { where: { active: true }, select: { lastSeenAt: true } },
         },
       })
@@ -67,9 +69,10 @@ publicMenuRouter.get(
     const client = await findMenu(req.params.slug);
     const catalog = client && (await db.catalogVersion.findFirst({ where: { clientId: client.id }, orderBy: { version: "desc" } }));
     if (!client || !catalog) return void unavailable(res);
-    const icons = client.product.iconSetId
-      ? await db.icon.findMany({ where: { setId: client.product.iconSetId }, select: { key: true, sha: true } })
-      : [];
+    const [icons, photos] = await Promise.all([
+      client.product.iconSetId ? db.icon.findMany({ where: { setId: client.product.iconSetId }, select: { key: true, sha: true } }) : [],
+      db.productPhoto.findMany({ where: { clientId: client.id }, select: { productId: true, sha: true } }),
+    ]);
     const seen = client.devices.map((d) => d.lastSeenAt?.getTime() ?? 0).filter(Boolean);
     const features = (client.product.features ?? {}) as Record<string, unknown>;
     const html = renderMenu({
@@ -77,11 +80,13 @@ publicMenuRouter.get(
       basePath: `${req.baseUrl}/${req.params.slug}`,
       clientName: client.name,
       giroName: client.product.name,
+      giroKey: client.product.key,
       catalog: catalog.data as Record<string, unknown>,
       info: (client.menuInfo ?? {}) as MenuInfo,
       // Igual que la app: lo que no está guardado cuenta como encendido.
       freeExtras: features.freeExtras !== false,
       icons: new Map(icons.map((i) => [i.key, i.sha])),
+      photos: new Map(photos.map((f) => [f.productId, f.sha])),
       lastSeenAt: seen.length ? new Date(Math.max(...seen)) : null,
     });
     // La cocina sincroniza cada 30 s: más caché haría que un agotado tarde en verse.
@@ -103,6 +108,18 @@ publicMenuRouter.get(
     if (!icon) return void res.status(404).set("Cache-Control", "no-store").end();
     // La página pide `?v=<sha>`: si el icono cambia, cambia la URL.
     res.type("png").set("Cache-Control", "public, max-age=31536000, immutable").send(Buffer.from(icon.png));
+  })
+);
+
+publicMenuRouter.get(
+  "/:slug/f/:productId.jpg",
+  asyncHandler(async (req, res) => {
+    const client = await findMenu(req.params.slug);
+    const photo =
+      client && (await db.productPhoto.findUnique({ where: { clientId_productId: { clientId: client.id, productId: req.params.productId } }, select: { jpeg: true } }));
+    if (!photo) return void res.status(404).set("Cache-Control", "no-store").end();
+    // La página pide `?v=<sha>`: si cambia la foto, cambia la URL.
+    res.type("jpeg").set("Cache-Control", "public, max-age=31536000, immutable").send(Buffer.from(photo.jpeg));
   })
 );
 
@@ -137,5 +154,64 @@ clientMenuVisitsRouter.get(
     });
     const sum = (n: number) => days.slice(-n).reduce((a, d) => a + d.count, 0);
     res.json({ today: sum(1), last7: sum(7), last30: sum(30), days });
+  })
+);
+
+/** Una foto pesa ~100–300 kB ya reducida en la consola; 800 kB deja margen sin aceptar originales de cámara. */
+export const MAX_PHOTO_BYTES = 800_000;
+const PHOTO_ID = /^[A-Za-z0-9_.:-]{1,80}$/;
+const JPEG_MAGIC = [0xff, 0xd8, 0xff];
+const PhotoInput = z.object({ jpeg: z.string().min(10) });
+
+/** Consola: fotos reales de los productos del menú del cliente. */
+export const clientPhotosRouter = Router();
+
+const photoParams = (req: { params: Record<string, string> }) => {
+  if (!PHOTO_ID.test(req.params.productId)) throw new HttpError(400, "INVALID_PRODUCT_ID", "Producto inválido");
+  return { clientId: req.params.id, productId: req.params.productId };
+};
+
+clientPhotosRouter.get(
+  "/:id/photos",
+  asyncHandler(async (req, res) => {
+    const rows = await db.productPhoto.findMany({ where: { clientId: req.params.id }, select: { productId: true, sha: true, updatedAt: true } });
+    res.json(rows.map((r) => ({ productId: r.productId, sha: r.sha, updatedAt: r.updatedAt.toISOString() })));
+  })
+);
+
+clientPhotosRouter.get(
+  "/:id/photos/:productId",
+  asyncHandler(async (req, res) => {
+    const photo = await db.productPhoto.findUnique({ where: { clientId_productId: photoParams(req) }, select: { jpeg: true } });
+    if (!photo) throw new HttpError(404, "PHOTO_NOT_FOUND", "Ese producto no tiene foto");
+    res.type("jpeg").set("Cache-Control", "no-store").send(Buffer.from(photo.jpeg));
+  })
+);
+
+clientPhotosRouter.put(
+  "/:id/photos/:productId",
+  asyncHandler(async (req, res) => {
+    const key = photoParams(req);
+    const bytes = Buffer.from(PhotoInput.parse(req.body).jpeg, "base64");
+    if (!JPEG_MAGIC.every((b, i) => bytes[i] === b)) throw new HttpError(400, "INVALID_PHOTO", "La foto debe ser JPEG");
+    if (bytes.length > MAX_PHOTO_BYTES) throw new HttpError(413, "PHOTO_TOO_LARGE", "La foto pesa demasiado");
+    const client = await db.client.findUnique({ where: { id: key.clientId }, select: { id: true } });
+    if (!client) throw new HttpError(404, "CLIENT_NOT_FOUND", "Cliente no encontrado");
+    const sha = shaOf(bytes);
+    const row = await db.productPhoto.upsert({
+      where: { clientId_productId: key },
+      create: { ...key, jpeg: bytes, sha },
+      update: { jpeg: bytes, sha },
+      select: { productId: true, sha: true, updatedAt: true },
+    });
+    res.json({ productId: row.productId, sha: row.sha, updatedAt: row.updatedAt.toISOString() });
+  })
+);
+
+clientPhotosRouter.delete(
+  "/:id/photos/:productId",
+  asyncHandler(async (req, res) => {
+    await db.productPhoto.deleteMany({ where: photoParams(req) });
+    res.status(204).end();
   })
 );

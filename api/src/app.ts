@@ -20,7 +20,7 @@ import { appErrorsRouter, clientAppErrorsRouter, recentAppErrorsRouter } from ".
 import { deviceIconSetRouter, iconSetsRouter } from "./routes/icon-sets";
 import { clientCatalogRouter, deviceCatalogRouter } from "./routes/catalog";
 import { menuTemplatesRouter } from "./routes/menu-templates";
-import { clientMenuVisitsRouter, menuHostOf, menuSiteRouter, publicMenuRouter } from "./routes/public-menu";
+import { clientMenuVisitsRouter, clientPhotosRouter, menuHostOf, menuSiteRouter, publicMenuRouter } from "./routes/public-menu";
 import { CATALOG_LIMIT, ICON_SET_LIMIT } from "./lib/giro";
 
 export const createApp = ({ menuHost = menuHostOf(config.PUBLIC_MENU_URL) }: { menuHost?: string | null } = {}) => {
@@ -36,6 +36,8 @@ export const createApp = ({ menuHost = menuHostOf(config.PUBLIC_MENU_URL) }: { m
   app.use("/api/v1/catalog", express.json({ limit: CATALOG_LIMIT }));
   app.use(/^\/api\/v1\/clients\/[^/]+\/catalog$/, express.json({ limit: CATALOG_LIMIT }));
   app.use(/^\/api\/v1\/products\/[^/]+$/, express.json({ limit: CATALOG_LIMIT }));
+  // Fotos de productos del menú digital (JPEG en base64).
+  app.use(/^\/api\/v1\/clients\/[^/]+\/photos\/[^/]+$/, express.json({ limit: "1.5mb" }));
   app.use("/api/v1/icon-sets", express.json({ limit: ICON_SET_LIMIT }));
   app.use(express.json({ limit: "100kb" }));
 
@@ -71,6 +73,7 @@ export const createApp = ({ menuHost = menuHostOf(config.PUBLIC_MENU_URL) }: { m
   admin.use("/clients", clientAppErrorsRouter);
   admin.use("/clients", clientCatalogRouter);
   admin.use("/clients", clientMenuVisitsRouter);
+  admin.use("/clients", clientPhotosRouter);
   admin.use("/app-errors", recentAppErrorsRouter);
   admin.use("/sales-overview", salesOverviewRouter);
   admin.use("/payments", paymentsRouter);

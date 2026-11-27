@@ -36,6 +36,7 @@ test("renderMenu: categorías en orden, huérfanos en Otros y aviso de menú vie
     basePath: "/m/luigi",
     clientName: "Pizzas Don Luigi",
     giroName: "Pizzería",
+    giroKey: "PIZZERIA",
     catalog: {
       categories: [{ name: "Pizzas" }, { name: "Vacía" }, { name: "Bebidas" }],
       products: [
@@ -62,6 +63,7 @@ test("renderMenu: opciones iguales en toda la sección se dicen una vez; sin set
     basePath: "/t",
     clientName: "T",
     giroName: "Taquería",
+    giroKey: "TAQUERIA",
     catalog: {
       categories: [{ name: "Tacos" }],
       products: [
@@ -76,6 +78,15 @@ test("renderMenu: opciones iguales en toda la sección se dicen una vez; sin set
     lastSeenAt: null,
   });
   assert.equal(html.match(/Va:<\/span>/g)?.length, 1);
-  assert.match(html, /<h2>Tacos<\/h2><ul class="opts shared">/);
-  assert.ok(!html.includes('class="noimg"'));
+  assert.match(html, /<h2>Tacos<\/h2><svg class="orn"[^]*?<\/svg><\/div><ul class="opts shared">/);
+  // Sin set de iconos no hay imágenes ni portada ilustrada.
+  assert.ok(!html.includes("<img"));
+  // Colores del giro.
+  assert.match(html, /--hero:#1F3B2D/);
+});
+
+test("themeOf: cada giro tiene su paleta y uno desconocido usa la de la app", async () => {
+  const { themeOf } = await import("./public-menu");
+  assert.notEqual(themeOf("SUSHI").hero, themeOf("PIZZERIA").hero);
+  assert.equal(themeOf("BIRRIA").hero, "#2F7358");
 });

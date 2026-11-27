@@ -205,6 +205,11 @@ Página pública del menú de cada cliente, sin sesión ni app.
   - `MENU_SLUG_REQUIRED` si se enciende sin dirección.
   - `MENU_SLUG_TAKEN` si la dirección es de otro cliente.
   - La página Menú digital tiene vista previa y QR para mesas (6 por hoja) y mostrador.
+- **Fotos reales:** `GET /clients/:id/photos`, `GET/PUT/DELETE /clients/:id/photos/:productId` (consola).
+  - Una foto por producto del menú (por su `id`), en JPEG de hasta 800 kB; la consola la reduce a 1000 px antes de subirla.
+  - No viajan a los teléfonos de cocina.
+  - El menú enseña la foto en lugar del icono y usa las primeras tres en la portada: `GET /<slug>/f/<productId>.jpg?v=<sha>`, con caché de un año.
+- **Diseño:** cada giro tiene su paleta (Taquería, Sushi, Pizzería; los demás usan la de la app).
 - **Visitas:** `GET /clients/:id/menu-visits` devuelve `{ today, last7, last30, days }`, por día de CDMX.
   - Solo cuenta navegadores.
   - No cuenta las vistas previas de enlaces (WhatsApp, Facebook), los bots ni la vista previa de la consola.

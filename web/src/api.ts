@@ -655,3 +655,35 @@ export const listMenuTemplates = () => api<MenuTemplateSummary[]>("GET", "/menu-
 export const getMenuTemplate = (key: string) => api<{ key: string; name: string; data: MenuData }>("GET", `/menu-templates/${key}`);
 /** Menú base del giro (el que recibe cada cliente nuevo); null si no tiene. */
 export const getGiroTemplate = (productId: string) => api<{ template: MenuData | null }>("GET", `/products/${productId}/template`);
+
+/* ------------------------------------------------------------------ */
+/* Fotos reales de productos (menú digital)                            */
+/* ------------------------------------------------------------------ */
+
+export interface ProductPhoto {
+  productId: string;
+  sha: string;
+  updatedAt: string;
+}
+
+export const listProductPhotos = (clientId: string) => api<ProductPhoto[]>("GET", `/clients/${clientId}/photos`);
+export const saveProductPhoto = (clientId: string, productId: string, jpeg: string) =>
+  api<ProductPhoto>("PUT", `/clients/${clientId}/photos/${encodeURIComponent(productId)}`, { jpeg });
+export const deleteProductPhoto = async (clientId: string, productId: string) => {
+  const token = session.get();
+  const res = await fetch(`${BASE}/clients/${clientId}/photos/${encodeURIComponent(productId)}`, {
+    method: "DELETE",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new ApiError(res.status, "ERROR", "No se pudo quitar la foto");
+};
+
+/** La foto con la sesión de la consola (un `<img>` no manda el token): URL de blob para mostrarla. */
+export const productPhotoUrl = async (clientId: string, productId: string): Promise<string> => {
+  const token = session.get();
+  const res = await fetch(`${BASE}/clients/${clientId}/photos/${encodeURIComponent(productId)}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new ApiError(res.status, "ERROR", "No se pudo cargar la foto");
+  return URL.createObjectURL(await res.blob());
+};

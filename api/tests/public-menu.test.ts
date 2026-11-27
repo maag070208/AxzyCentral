@@ -132,7 +132,7 @@ test("menú digital: enseña el menú de la cocina, sus agotados e iconos, y nad
   assert.match(html, /\$25/);
   assert.match(html, /Tortilla:<\/span> Maíz, Harina/);
   assert.match(html, /Chica<\/span><b>\$20<\/b>/);
-  assert.match(html, /Sin costo:<\/b> Cebollitas, Chiles toreados/);
+  assert.match(html, /Sin costo<\/b> Cebollitas, Chiles toreados/);
   assert.match(html, /Lun a sáb, 7 pm a 1 am/);
   assert.match(html, /href="https:\/\/wa\.me\/525512345678"/);
   assert.doesNotMatch(html, /Agotado/);
@@ -156,7 +156,7 @@ test("menú digital: enseña el menú de la cocina, sus agotados e iconos, y nad
   // La cocina agota el suadero: en la siguiente sincronización la página lo tacha.
   assert.equal((await call("PUT", "/catalog", { auth: code, body: { baseVersion: 1, data: menu(false) } })).status, 200);
   const out = (await page("/m/el-guero")).html;
-  assert.match(out, /<li class="item out">.*?<h3>Suadero<\/h3><span class="tag">Agotado<\/span>/s);
+  assert.match(out, /<li class="item out[^"]*">.*?<h3>Suadero<\/h3><span class="tag">Agotado<\/span>/s);
 });
 
 test("menú digital: cuenta las visitas de comensales por día, no las vistas previas de enlaces", async () => {
@@ -209,6 +209,41 @@ test("menú digital: en su dominio se sirve en la raíz y ahí no hay API", asyn
   } finally {
     site.close();
   }
+});
+
+test("fotos: la consola sube, cambia y quita la foto de un producto, y el menú la enseña", async () => {
+  const jpeg = (seed: number, size = 2000) => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(size, seed)]).toString("base64");
+  // Solo JPEG, con sesión y de tamaño razonable.
+  assert.equal((await call("PUT", `/clients/${clientId}/photos/asada`, { body: { jpeg: png(1) } })).body.code, "INVALID_PHOTO");
+  assert.equal((await call("PUT", `/clients/${clientId}/photos/asada`, { body: { jpeg: jpeg(1) }, auth: null })).status, 401);
+  assert.equal((await call("PUT", `/clients/${clientId}/photos/asada`, { body: { jpeg: jpeg(1, 900_000) } })).status, 413);
+  assert.equal((await call("PUT", `/clients/${clientId}/photos/no%20vale`, { body: { jpeg: jpeg(1) } })).status, 400);
+
+  const saved = await call("PUT", `/clients/${clientId}/photos/asada`, { body: { jpeg: jpeg(1) } });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.productId, "asada");
+  assert.deepEqual((await call("GET", `/clients/${clientId}/photos`)).body.map((p: { productId: string }) => p.productId), ["asada"]);
+  const admin = await fetch(`${origin}/api/v1/clients/${clientId}/photos/asada`, { headers: { Authorization: `Bearer ${token}` } });
+  assert.equal(admin.headers.get("content-type"), "image/jpeg");
+
+  // El menú enseña la foto en lugar del icono, y también en la portada.
+  const html = (await page("/m/el-guero")).html;
+  const src = html.match(/<img class="photo" src="(\/m\/el-guero\/f\/asada\.jpg\?v=[0-9a-f]+)"/);
+  assert.ok(src, "foto de asada en el menú");
+  assert.match(html, /class="art pic a0"/);
+  assert.doesNotMatch(html, /i\/taco_asada\.png/);
+  const pub = await fetch(`${origin}${src![1]}`);
+  assert.equal(pub.status, 200);
+  assert.equal(pub.headers.get("content-type"), "image/jpeg");
+  assert.match(pub.headers.get("cache-control") ?? "", /immutable/);
+  assert.deepEqual(Buffer.from(await pub.arrayBuffer()), Buffer.from(jpeg(1), "base64"));
+
+  // Cambiarla cambia la URL; quitarla regresa al icono.
+  const changed = await call("PUT", `/clients/${clientId}/photos/asada`, { body: { jpeg: jpeg(2) } });
+  assert.notEqual(changed.body.sha, saved.body.sha);
+  assert.equal((await call("DELETE", `/clients/${clientId}/photos/asada`)).status, 204);
+  assert.match((await page("/m/el-guero")).html, /i\/taco_asada\.png/);
+  assert.equal((await fetch(`${origin}/m/el-guero/f/asada.jpg`)).status, 404);
 });
 
 test("menú digital: apagado o cliente suspendido ya no se ve, ni sus iconos", async () => {

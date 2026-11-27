@@ -1,8 +1,23 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ITBadget, ITButton, ITCheckbox, ITInput } from "@axzydev/axzy_ui_system";
-import { LuCopy, LuExternalLink, LuPrinter, LuRefreshCw, LuSave } from "react-icons/lu";
-import { api, getConfig, getMenuVisits, saveDigitalMenu, suggestMenuSlug, type ClientDetail, type MenuVisits } from "../api";
+import { LuCamera, LuCopy, LuExternalLink, LuPrinter, LuRefreshCw, LuSave, LuTrash2 } from "react-icons/lu";
+import {
+  api,
+  deleteProductPhoto,
+  getClientMenu,
+  getConfig,
+  getMenuVisits,
+  listProductPhotos,
+  productPhotoUrl,
+  saveDigitalMenu,
+  saveProductPhoto,
+  suggestMenuSlug,
+  type ClientDetail,
+  type MenuProduct,
+  type MenuVisits,
+} from "../api";
+import { resizePhoto } from "../components/resizePhoto";
 import { printMenuQr, type QrSheet } from "../components/printMenuQr";
 import { errorOf } from "../shared";
 import { useNotify } from "../toast";
@@ -203,6 +218,8 @@ export default function DigitalMenu() {
                 </Muted>
               )}
             </Card>
+
+            <PhotosCard clientId={id} onChanged={() => setPreview((n) => n + 1)} />
           </div>
 
           <aside className="flex min-w-0 flex-col gap-5 xl:sticky xl:top-6">
@@ -229,5 +246,128 @@ export default function DigitalMenu() {
         </div>
       )}
     </Page>
+  );
+}
+
+/**
+ * Fotos reales de los productos. Se guardan en la Central aparte del menú (no viajan a la cocina);
+ * el menú digital enseña la foto donde la hay y el icono del giro donde no.
+ */
+function PhotosCard({ clientId, onChanged }: { clientId: string; onChanged: () => void }) {
+  const notify = useNotify();
+  const [products, setProducts] = useState<MenuProduct[] | null>(null);
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    setError("");
+    try {
+      const [menu, photos] = await Promise.all([getClientMenu(clientId), listProductPhotos(clientId)]);
+      setProducts(menu.current?.data.products ?? []);
+      const entries = await Promise.all(photos.map(async (p) => [p.productId, await productPhotoUrl(clientId, p.productId)] as const));
+      setUrls((old) => {
+        Object.values(old).forEach((u) => URL.revokeObjectURL(u));
+        return Object.fromEntries(entries);
+      });
+    } catch (e) {
+      setError(errorOf(e));
+    }
+  }, [clientId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const upload = async (p: MenuProduct, file: File | undefined) => {
+    if (!file) return;
+    setBusy(p.id);
+    try {
+      await saveProductPhoto(clientId, p.id, await resizePhoto(file));
+      notify(`Foto de ${p.name} guardada`, "success");
+      await load();
+      onChanged();
+    } catch (e) {
+      notify(errorOf(e), "error");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const remove = async (p: MenuProduct) => {
+    setBusy(p.id);
+    try {
+      await deleteProductPhoto(clientId, p.id);
+      notify(`Se quitó la foto de ${p.name}`, "success");
+      await load();
+      onChanged();
+    } catch (e) {
+      notify(errorOf(e), "error");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const withPhoto = products ? products.filter((p) => urls[p.id]).length : 0;
+
+  return (
+    <Card
+      title="Fotos de productos"
+      subtitle={products ? `${withPhoto} de ${products.length} con foto · donde no hay foto se ve el icono del giro` : "Fotos reales para el menú digital"}
+    >
+      {error ? (
+        <Muted>{error}</Muted>
+      ) : !products ? (
+        <Muted>Cargando…</Muted>
+      ) : products.length === 0 ? (
+        <Muted>El cliente todavía no tiene menú en la Central.</Muted>
+      ) : (
+        <ul className="grid gap-2 sm:grid-cols-2">
+          {products.map((p) => (
+            <li key={p.id} className="flex items-center gap-3 rounded-xl border border-slate-100 p-2 dark:border-slate-800">
+              {urls[p.id] ? (
+                <img src={urls[p.id]} alt="" className="h-14 w-14 flex-none rounded-lg object-cover" />
+              ) : (
+                <span className="flex h-14 w-14 flex-none items-center justify-center rounded-lg bg-slate-100 text-slate-400 dark:bg-slate-800">
+                  <LuCamera size={18} />
+                </span>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{p.name}</p>
+                <p className="truncate text-xs text-slate-500">{p.category}</p>
+              </div>
+              <label
+                className={`cursor-pointer rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 ${
+                  busy === p.id ? "pointer-events-none opacity-50" : ""
+                }`}
+              >
+                {busy === p.id ? "Subiendo…" : urls[p.id] ? "Cambiar" : "Subir foto"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  aria-label={`Foto de ${p.name}`}
+                  className="hidden"
+                  onChange={(e) => {
+                    void upload(p, e.target.files?.[0]);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              {urls[p.id] && (
+                <button
+                  type="button"
+                  aria-label={`Quitar la foto de ${p.name}`}
+                  disabled={busy === p.id}
+                  onClick={() => void remove(p)}
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-950/40"
+                >
+                  <LuTrash2 size={15} />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
