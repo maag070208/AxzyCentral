@@ -224,7 +224,8 @@ export const renderMenu = (m: PublicMenuInput): string => {
 --text:"Avenir Next","Segoe UI",Roboto,system-ui,-apple-system,sans-serif}
 *{box-sizing:border-box}
 body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.45 var(--text);-webkit-font-smoothing:antialiased}
-.hero{position:relative;overflow:hidden;background:var(--hero);color:var(--hero-ink);padding:40px 20px 36px}
+.hero{position:relative;overflow:hidden;background:var(--hero);color:var(--hero-ink);padding:40px 20px 36px;min-height:232px}
+@media (min-width:600px){.hero{min-height:300px}}
 .hero::after{content:"";position:absolute;inset:auto 0 0;height:6px;background:repeating-linear-gradient(90deg,var(--gold) 0 18px,transparent 18px 26px)}
 .wrap{position:relative;max-width:820px;margin:0 auto}
 .kicker{margin:0;font:700 13px/1 var(--cond);letter-spacing:.28em;text-transform:uppercase;color:var(--kicker)}
