@@ -194,7 +194,6 @@ Página pública del menú de cada cliente, sin sesión ni app.
   - Nombre del local, giro y `menuInfo` (`hours`, `whatsapp`, `address`).
   - Categorías, tamaños con precio, opciones como texto, extras sin costo e iconos del set del giro.
   - Los agotados salen tachados.
-  - Si la cocina lleva más de 30 min sin conectarse, avisa desde cuándo es el menú.
 - **Qué no enseña:** notas, teléfono de contacto, cobros, ventas, PIN ni códigos.
 - **Iconos:** `GET /<slug>/i/<llave>.png?v=<sha>`, con caché de un año.
 - **Seguridad:**

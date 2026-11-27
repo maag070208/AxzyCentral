@@ -25,9 +25,6 @@ export type PublicMenuInput = {
   icons: Map<string, string>;
   /** Producto → sha de su foto real (JPEG); un producto con foto la enseña en lugar del icono. */
   photos?: Map<string, string>;
-  /** Última vez que la cocina habló con la Central; null si nunca. */
-  lastSeenAt: Date | null;
-  now?: Date;
 };
 
 const str = (v: unknown) => (typeof v === "string" ? v : "");
@@ -70,15 +67,6 @@ export const iconFor = (product: Json, category: Json | undefined, keys: string[
 export const money = (cents: number) => {
   const pesos = cents / 100;
   return `$${pesos.toLocaleString("es-MX", { minimumFractionDigits: Number.isInteger(pesos) ? 0 : 2, maximumFractionDigits: 2 })}`;
-};
-
-/** "hace 3 h": solo se muestra cuando la cocina lleva rato sin conectarse. */
-const STALE_MS = 30 * 60_000;
-const ago = (ms: number) => {
-  const min = Math.round(ms / 60_000);
-  if (min < 60) return `${min} min`;
-  const h = Math.round(min / 60);
-  return h < 48 ? `${h} h` : `${Math.round(h / 24)} días`;
 };
 
 const waLink = (phone: string) => {
@@ -147,7 +135,6 @@ const optionsHtml = (ids: string[], groups: Map<string, Json>) => {
 const ORNAMENT = `<svg class="orn" viewBox="0 0 120 12" aria-hidden="true"><path d="M0 6h50M70 6h50" stroke="currentColor" stroke-width="1"/><path d="M60 1l5 5-5 5-5-5z" fill="currentColor"/></svg>`;
 
 export const renderMenu = (m: PublicMenuInput): string => {
-  const now = m.now ?? new Date();
   const keys = [...m.icons.keys()];
   const groups = new Map(list(m.catalog.modifierGroups).map((g) => [str(g.id), g]));
   const secs = sections(m.catalog);
@@ -207,7 +194,6 @@ export const renderMenu = (m: PublicMenuInput): string => {
   const wa = m.info.whatsapp ? waLink(m.info.whatsapp) : null;
   if (wa) info.push(`<li><a href="${wa}" rel="noopener">WhatsApp ${escapeHtml(m.info.whatsapp!)}</a></li>`);
 
-  const stale = m.lastSeenAt && now.getTime() - m.lastSeenAt.getTime() > STALE_MS;
 
   return `<!doctype html>
 <html lang="es">
@@ -240,7 +226,6 @@ h1{margin:10px 0 0;max-width:58%;font:400 clamp(40px,11vw,72px)/.95 var(--displa
 .a2{right:-12px;top:112px;width:72px;height:72px;transform:rotate(-4deg)}
 @media (min-width:600px){.a0{right:-6px;top:-8px;width:170px;height:170px}.a1{right:120px;top:96px;width:116px;height:116px}.a2{right:-10px;top:150px;width:108px;height:108px}}
 .art.pic{object-fit:cover;border-radius:50%;border:4px solid var(--hero-ink);filter:drop-shadow(0 10px 18px rgba(0,0,0,.35))}
-.stale{max-width:820px;margin:16px auto 0;padding:10px 14px;border-left:3px solid var(--accent);background:rgba(0,0,0,.04);font-size:14px}
 nav{position:sticky;top:0;z-index:2;background:var(--paper);border-bottom:1px solid var(--line)}
 nav ul{list-style:none;margin:0 auto;padding:12px 20px;display:flex;gap:22px;overflow-x:auto;max-width:860px;scrollbar-width:none}
 nav ul::-webkit-scrollbar{display:none}
@@ -291,7 +276,6 @@ ${heroArt}
 ${info.length ? `<ul class="info">${info.join("")}</ul>` : ""}
 </div>
 </header>
-${stale ? `<p class="stale">Menú actualizado hace ${ago(now.getTime() - m.lastSeenAt!.getTime())}; puede haber cambios.</p>` : ""}
 ${secs.length > 1 ? `<nav aria-label="Categorías"><ul>${secs.map((s) => `<li><a href="#${s.id}">${escapeHtml(s.name)}</a></li>`).join("")}</ul></nav>` : ""}
 <main>
 ${secs.length ? secs.map(section).join("\n") : `<p class="empty">Este menú todavía no tiene productos.</p>`}

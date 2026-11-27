@@ -40,7 +40,6 @@ const findMenu = (slug: string) =>
           name: true,
           menuInfo: true,
           product: { select: { key: true, name: true, features: true, iconSetId: true } },
-          devices: { where: { active: true }, select: { lastSeenAt: true } },
         },
       })
     : Promise.resolve(null);
@@ -73,7 +72,6 @@ publicMenuRouter.get(
       client.product.iconSetId ? db.icon.findMany({ where: { setId: client.product.iconSetId }, select: { key: true, sha: true } }) : [],
       db.productPhoto.findMany({ where: { clientId: client.id }, select: { productId: true, sha: true } }),
     ]);
-    const seen = client.devices.map((d) => d.lastSeenAt?.getTime() ?? 0).filter(Boolean);
     const features = (client.product.features ?? {}) as Record<string, unknown>;
     const html = renderMenu({
       // Las URL de los iconos cuelgan de donde se sirvió la página: `/m/<slug>` o `/<slug>`.
@@ -87,7 +85,6 @@ publicMenuRouter.get(
       freeExtras: features.freeExtras !== false,
       icons: new Map(icons.map((i) => [i.key, i.sha])),
       photos: new Map(photos.map((f) => [f.productId, f.sha])),
-      lastSeenAt: seen.length ? new Date(Math.max(...seen)) : null,
     });
     // La cocina sincroniza cada 30 s: más caché haría que un agotado tarde en verse.
     res.type("html").set("Cache-Control", "public, max-age=30").send(html);

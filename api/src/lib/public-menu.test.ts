@@ -30,8 +30,7 @@ test("money en pesos sin centavos de más", () => {
   assert.equal(money(125000), "$1,250");
 });
 
-test("renderMenu: categorías en orden, huérfanos en Otros y aviso de menú viejo", () => {
-  const now = new Date("2026-11-25T20:00:00Z");
+test("renderMenu: categorías en orden, huérfanos en Otros y sin aviso de menú viejo", () => {
   const html = renderMenu({
     basePath: "/m/luigi",
     clientName: "Pizzas Don Luigi",
@@ -48,13 +47,12 @@ test("renderMenu: categorías en orden, huérfanos en Otros y aviso de menú vie
     info: {},
     freeExtras: false,
     icons: new Map(),
-    lastSeenAt: new Date(now.getTime() - 3 * 3_600_000),
-    now,
   });
   const order = ["Pizzas", "Bebidas", "Otros"].map((n) => html.indexOf(`<h2>${n}</h2>`));
   assert.ok(order.every((i, k) => i > 0 && (k === 0 || i > order[k - 1])), "orden de secciones");
   assert.ok(!html.includes("<h2>Vacía</h2>"), "una categoría vacía no sale");
-  assert.match(html, /Menú actualizado hace 3 h/);
+  // El comensal no ve desde cuándo es el menú (asustaba más de lo que ayudaba).
+  assert.ok(!html.includes("actualizado hace"));
   assert.ok(!html.includes("Sin costo"));
 });
 
@@ -75,7 +73,6 @@ test("renderMenu: opciones iguales en toda la sección se dicen una vez; sin set
     info: {},
     freeExtras: false,
     icons: new Map(),
-    lastSeenAt: null,
   });
   assert.equal(html.match(/Va:<\/span>/g)?.length, 1);
   assert.match(html, /<h2>Tacos<\/h2><svg class="orn"[^]*?<\/svg><\/div><ul class="opts shared">/);
